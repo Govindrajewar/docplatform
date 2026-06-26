@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { updateOrganizationSchema } from '@platform/shared';
 
 import { authenticate } from '../../middleware/authenticate';
+import { recordAudit } from '../../middleware/audit';
 import { requirePermission } from '../../middleware/require-permission';
 import { validate } from '../../middleware/validate';
 
@@ -21,5 +22,6 @@ organizationsRouter.patch(
   '/mine',
   requirePermission('organizations:write'),
   validate(updateOrganizationSchema),
+  recordAudit('organization.update', 'organization'),
   organizationsController.updateMine,
 );

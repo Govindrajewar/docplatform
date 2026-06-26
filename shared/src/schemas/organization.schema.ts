@@ -16,13 +16,11 @@ export const createOrganizationSchema = z.object({
 });
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 
+/** Organization "profile/branding" surface — see settings.schema.ts for the "preferences" surface (PRD 05 §5.10). */
 export const updateOrganizationSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   primaryColor: hexColor.optional(),
   secondaryColor: hexColor.optional(),
-  defaultCurrency: z.string().length(3).optional(),
-  defaultTimezone: z.string().min(1).optional(),
-  defaultPaperSize: z.enum(['A4', 'LETTER', 'LEGAL']).optional(),
   isActive: z.boolean().optional(),
 });
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;

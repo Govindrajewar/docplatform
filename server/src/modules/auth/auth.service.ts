@@ -2,6 +2,7 @@ import type { LoginInput, RegisterInput, ResetPasswordInput } from '@platform/sh
 
 import { logger } from '../../config/logger';
 import { AppError } from '../../utils/app-error';
+import { auditLogsRepository } from '../audit-logs/audit-logs.repository';
 import { organizationsRepository } from '../organizations/organizations.repository';
 import { rolesRepository } from '../roles/roles.repository';
 import { toPublicUser, type PublicUser } from '../users/users.mapper';
@@ -24,6 +25,31 @@ interface AuthResult {
   user: PublicUser;
   accessToken: string;
   refreshToken: string;
+}
+
+interface RequestMeta {
+  ip?: string | null;
+  userAgent?: string | null;
+}
+
+function logAuthEvent(
+  action: string,
+  organizationId: string | null,
+  actorId: string | null,
+  meta: RequestMeta = {},
+): void {
+  if (!organizationId) return; // can't attribute to a tenant before we know which org (e.g. unknown email)
+  auditLogsRepository
+    .create({
+      organizationId,
+      actorId,
+      action,
+      entityType: 'user',
+      entityId: actorId,
+      ipAddress: meta.ip ?? null,
+      userAgent: meta.userAgent ?? null,
+    })
+    .catch((err: unknown) => logger.warn('Failed to write auth audit log', { err, action }));
 }
 
 function slugify(input: string): string {
@@ -51,7 +77,7 @@ async function buildAccessTokenClaims(
 }
 
 export const authService = {
-  async register(input: RegisterInput): Promise<AuthResult> {
+  async register(input: RegisterInput, meta: RequestMeta = {}): Promise<AuthResult> {
     const existing = await usersRepository.findByEmailWithSecrets(input.email);
     if (existing) {
       throw new AppError('CONFLICT', 'An account with this email already exists');
@@ -80,24 +106,30 @@ export const authService = {
       roleId: adminRole._id.toString(),
     });
 
+    logAuthEvent('user.create', organization._id.toString(), user._id.toString(), meta);
     return issueSession(user._id.toString(), organization._id.toString(), adminRole._id.toString());
   },
 
-  async login(input: LoginInput): Promise<AuthResult> {
+  async login(input: LoginInput, meta: RequestMeta = {}): Promise<AuthResult> {
     const user = await usersRepository.findByEmailWithSecrets(input.email);
     if (!user) throw new AppError('UNAUTHORIZED', GENERIC_LOGIN_ERROR);
 
+    const organizationId = user.organizationId.toString();
+
     if (user.status === 'suspended' || user.status === 'deleted') {
+      logAuthEvent('auth.login.failure', organizationId, user._id.toString(), meta);
       throw new AppError('ACCOUNT_SUSPENDED', 'This account has been suspended');
     }
 
-    const organization = await organizationsRepository.findById(user.organizationId.toString());
+    const organization = await organizationsRepository.findById(organizationId);
     if (!organization || !organization.isActive) {
+      logAuthEvent('auth.login.failure', organizationId, user._id.toString(), meta);
       throw new AppError('ORGANIZATION_INACTIVE', 'This organization is inactive');
     }
 
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
       // Don't reveal lockout state distinctly from a wrong password — see PRD 10 §10.1.
+      logAuthEvent('auth.login.failure', organizationId, user._id.toString(), meta);
       throw new AppError('UNAUTHORIZED', GENERIC_LOGIN_ERROR);
     }
 
@@ -106,20 +138,21 @@ export const authService = {
       const attempts = user.failedLoginAttempts + 1;
       const lockedUntil =
         attempts >= MAX_FAILED_LOGIN_ATTEMPTS ? new Date(Date.now() + LOCK_DURATION_MS) : null;
-      await usersRepository.updateById(
-        { organizationId: user.organizationId.toString() },
-        user._id.toString(),
-        { failedLoginAttempts: lockedUntil ? 0 : attempts, lockedUntil },
-      );
+      await usersRepository.updateById({ organizationId }, user._id.toString(), {
+        failedLoginAttempts: lockedUntil ? 0 : attempts,
+        lockedUntil,
+      });
+      logAuthEvent('auth.login.failure', organizationId, user._id.toString(), meta);
       throw new AppError('UNAUTHORIZED', GENERIC_LOGIN_ERROR);
     }
 
-    await usersRepository.updateById(
-      { organizationId: user.organizationId.toString() },
-      user._id.toString(),
-      { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
-    );
+    await usersRepository.updateById({ organizationId }, user._id.toString(), {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      lastLoginAt: new Date(),
+    });
 
+    logAuthEvent('auth.login.success', organizationId, user._id.toString(), meta);
     return issueSession(
       user._id.toString(),
       user.organizationId.toString(),
@@ -176,7 +209,7 @@ export const authService = {
     logger.info('Password reset link generated', { email: user.email, resetToken: token });
   },
 
-  async resetPassword(input: ResetPasswordInput): Promise<void> {
+  async resetPassword(input: ResetPasswordInput, meta: RequestMeta = {}): Promise<void> {
     const hash = hashToken(input.token);
     const user = await usersRepository.findByPasswordResetTokenHash(hash);
 
@@ -202,6 +235,7 @@ export const authService = {
         lockedUntil: null,
       },
     );
+    logAuthEvent('auth.password.reset', user.organizationId.toString(), user._id.toString(), meta);
   },
 
   async getMe(organizationId: string, userId: string): Promise<PublicUser> {

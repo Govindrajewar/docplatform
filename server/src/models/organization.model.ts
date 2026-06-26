@@ -13,6 +13,8 @@ const organizationSchema = new Schema(
     defaultCurrency: { type: String, default: 'USD' },
     defaultTimezone: { type: String, default: 'UTC' },
     defaultPaperSize: { type: String, enum: ['A4', 'LETTER', 'LEGAL'], default: 'A4' },
+    theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
+    language: { type: String, default: 'en' },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true },

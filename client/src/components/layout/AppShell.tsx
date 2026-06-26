@@ -1,13 +1,25 @@
-import { LayoutDashboard, LogOut, Settings, Users } from 'lucide-react';
+import {
+  FileClock,
+  LayoutDashboard,
+  Image,
+  LogOut,
+  Settings,
+  Users,
+  UsersRound,
+} from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { GlobalSearch } from '@/components/common/GlobalSearch';
 import { cn } from '@/lib/cn';
 import { useLogout } from '@/features/auth/api';
 import { useAuthStore } from '@/stores/auth.store';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/customers', label: 'Customers', icon: UsersRound },
+  { to: '/assets', label: 'Assets', icon: Image },
   { to: '/users', label: 'Users', icon: Users },
+  { to: '/audit-logs', label: 'Logs', icon: FileClock },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -49,9 +61,14 @@ export function AppShell() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto p-8">
-        <Outlet />
-      </main>
+      <div className="flex flex-1 flex-col">
+        <header className="flex h-16 items-center justify-end border-b border-border bg-card px-8">
+          <GlobalSearch />
+        </header>
+        <main className="flex-1 overflow-y-auto p-8">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

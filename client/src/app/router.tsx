@@ -3,6 +3,9 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
 
 import { AppShell } from '@/components/layout/AppShell';
+import { AssetsPage } from '@/pages/AssetsPage';
+import { AuditLogsPage } from '@/pages/AuditLogsPage';
+import { CustomersPage } from '@/pages/CustomersPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { UsersPage } from '@/pages/UsersPage';
@@ -24,7 +27,10 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { path: '/dashboard', element: <DashboardPage /> },
+          { path: '/customers', element: <CustomersPage /> },
+          { path: '/assets', element: <AssetsPage /> },
           { path: '/users', element: <UsersPage /> },
+          { path: '/audit-logs', element: <AuditLogsPage /> },
           { path: '/settings', element: <SettingsPage /> },
         ],
       },

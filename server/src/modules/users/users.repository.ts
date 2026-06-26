@@ -69,6 +69,16 @@ export const usersRepository = {
     };
   },
 
+  async searchByNameOrEmail(ctx: TenantContext, q: string, limit: number): Promise<UserDocument[]> {
+    return UserModel.find({
+      organizationId: ctx.organizationId,
+      status: { $ne: 'deleted' },
+      $or: [{ name: { $regex: q, $options: 'i' } }, { email: { $regex: q, $options: 'i' } }],
+    })
+      .limit(limit)
+      .lean();
+  },
+
   async countActiveByRole(ctx: TenantContext, roleId: string): Promise<number> {
     return UserModel.countDocuments({
       organizationId: ctx.organizationId,

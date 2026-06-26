@@ -23,15 +23,22 @@ function clearRefreshCookie(res: Response): void {
   res.clearCookie(REFRESH_COOKIE_NAME, { path: '/api/v1/auth' });
 }
 
+function requestMeta(req: Request) {
+  return { ip: req.ip, userAgent: req.headers['user-agent'] };
+}
+
 export const authController = {
   register: asyncHandler(async (req: Request, res: Response) => {
-    const { user, accessToken, refreshToken } = await authService.register(req.body);
+    const { user, accessToken, refreshToken } = await authService.register(
+      req.body,
+      requestMeta(req),
+    );
     setRefreshCookie(res, refreshToken);
     sendSuccess(res, { user, accessToken }, { status: 201 });
   }),
 
   login: asyncHandler(async (req: Request, res: Response) => {
-    const { user, accessToken, refreshToken } = await authService.login(req.body);
+    const { user, accessToken, refreshToken } = await authService.login(req.body, requestMeta(req));
     setRefreshCookie(res, refreshToken);
     sendSuccess(res, { user, accessToken });
   }),
@@ -59,7 +66,7 @@ export const authController = {
   }),
 
   resetPassword: asyncHandler(async (req: Request, res: Response) => {
-    await authService.resetPassword(req.body);
+    await authService.resetPassword(req.body, requestMeta(req));
     sendSuccess(res, { message: 'Password has been reset' });
   }),
 
