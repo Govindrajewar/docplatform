@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import path from 'path';
+
 import { ROLE_PERMISSIONS, SYSTEM_ROLES } from '@platform/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -15,6 +18,21 @@ const app = createApp();
 const PNG_BUFFER = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
   'base64',
+);
+
+// No real TTF/OTF fixture ships with this repo (npm strips test fixtures from published
+// tarballs), so these tests borrow the genuine font files bwip-js bundles for its own barcode
+// text rendering — they're read directly from node_modules rather than copied into the repo, to
+// avoid redistributing a third-party font under an unconfirmed license.
+const REAL_TTF_PATH = path.join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'node_modules',
+  'bwip-js',
+  'fonts',
+  'OCRA7.ttf',
 );
 
 const SVG_WITH_SCRIPT = Buffer.from(
@@ -75,6 +93,37 @@ describe('Assets upload pipeline', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .field('type', 'logo')
       .attach('file', Buffer.from('not a real image'), 'fake.png');
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('accepts a genuine TTF font file', async () => {
+    const { accessToken } = await registerUser(app);
+    const fontBuffer = readFileSync(REAL_TTF_PATH);
+
+    const res = await request(app)
+      .post('/api/v1/assets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .field('type', 'font')
+      .attach('file', fontBuffer, 'test-font.ttf');
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.mimeType).toBe('font/ttf');
+  });
+
+  it('rejects a file with valid TTF magic bytes but no parseable font structure', async () => {
+    const { accessToken } = await registerUser(app);
+    // A real TTF file's signature is detected from its first few bytes alone, so truncating one
+    // still sniffs as `font/ttf` — this exercises the fontkit-based structural validation in
+    // `assets.service.ts`, not just the magic-byte MIME sniff.
+    const truncated = readFileSync(REAL_TTF_PATH).subarray(0, 100);
+
+    const res = await request(app)
+      .post('/api/v1/assets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .field('type', 'font')
+      .attach('file', truncated, 'broken-font.ttf');
 
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 
 import FileType from 'file-type';
+import * as fontkit from 'fontkit';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -34,6 +35,30 @@ function looksLikeSvg(buffer: Buffer): boolean {
   return /<svg[\s>]/i.test(head);
 }
 
+const FONT_MIME_TYPES = new Set([
+  'font/ttf',
+  'font/otf',
+  'application/font-sfnt',
+  'application/x-font-ttf',
+]);
+
+/** Confirms the buffer actually parses as a font (rejects renamed/garbage files masquerading
+ * as a font via magic bytes alone) and that it exposes at least one renderable glyph — see the
+ * Phase 2 TODO deferred to Phase 3 in PRD 08 §8.3. */
+function validateFontBuffer(buffer: Buffer): void {
+  let parsed: fontkit.Font | fontkit.FontCollection;
+  try {
+    parsed = fontkit.create(buffer);
+  } catch {
+    throw new AppError('VALIDATION_ERROR', 'File could not be parsed as a valid font');
+  }
+
+  const font = 'fonts' in parsed ? parsed.fonts[0] : parsed;
+  if (!font || font.numGlyphs === 0) {
+    throw new AppError('VALIDATION_ERROR', 'Font file contains no usable glyphs');
+  }
+}
+
 /** Sniffs the real MIME from file content — never trusts the client-supplied Content-Type (PRD 08 §8.3). */
 async function sniffMimeType(buffer: Buffer, declaredType: AssetType): Promise<string> {
   // SVG is plain XML with no fixed magic bytes — file-type often classifies it as generic
@@ -65,6 +90,10 @@ async function processBuffer(buffer: Buffer, mimeType: string): Promise<Buffer> 
     }
     // Re-encoding (without .withMetadata()) strips EXIF/embedded payloads from the original file.
     return mimeType === 'image/png' ? image.png().toBuffer() : image.jpeg().toBuffer();
+  }
+
+  if (FONT_MIME_TYPES.has(mimeType)) {
+    validateFontBuffer(buffer);
   }
 
   return buffer;
