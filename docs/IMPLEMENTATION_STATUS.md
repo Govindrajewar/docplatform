@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~85% complete** (5 of 7 roadmap phases fully shipped, Phase 6 fully done). Phase 5 (Document Generation) is fully done, server and client. Phase 6 (Dashboard, Notifications, Polish) is now complete in full — all three sub-phases (6a, 6b, 6c) shipped and verified live. Phase 7 (Production Hardening) is the only roadmap phase left.
+**~85% complete** (5 of 7 roadmap phases fully shipped, Phase 6 fully done, Phase 7 in progress). Phase 5 (Document Generation) is fully done, server and client. Phase 6 (Dashboard, Notifications, Polish) is complete in full. Phase 7 (Production Hardening) has its CI pipeline done; Docker/infra, the S3 driver, security hardening, and observability/load-testing remain.
 
 ---
 
 # Current Phase
 
-**Phase 7 — Production Hardening (not started).** Phase 6 is fully done: Phase 6a (Dashboard real data), Phase 6b (Notifications — toast, in-app, email worker), and Phase 6c (Polish — Swagger/OpenAPI docs, dark mode, skeleton loaders, empty states, Framer Motion animations) are all complete, server and client, all verified live in a browser. Phase 7 covers Docker Compose + Dockerfiles, GitHub Actions CI/CD, the S3 storage driver, and load testing/observability — none of it started yet.
+**Phase 7 — Production Hardening (in progress).** Phase 6 is fully done. Phase 7 covers four largely-independent slices: Docker Compose + Dockerfiles + the S3 storage driver, security hardening (Redis-backed rate limiting, CSRF), CI/CD, and observability/load-testing. Asked the user which to start with — they chose **CI/CD** over the Docker/infra slice this was originally recommended to start with. A GitHub Actions CI workflow (lint → typecheck → test → build) now runs on every push/PR. The CD half of the pipeline (Docker image build/push, staging/prod deploy, smoke tests) is deliberately not yet written — it depends on Docker images and a deploy target that don't exist yet (the Docker/infra slice). The other three slices (Docker/infra, security hardening, observability/load-testing) are still untouched.
 
 ---
 
@@ -124,9 +124,25 @@ Client-side only — this finishes Phase 6c's visual half, after the Swagger/Ope
 
 ---
 
+### Phase 7 (partial) — CI pipeline ✅ (Docker/infra, security hardening, observability/load-testing remain)
+
+`.github/workflows/ci.yml` (new) — runs on every push (any branch) and PR targeting `main`: checkout → Node 20 (npm-cached) → `npm ci` → `npm run lint` → `npm run build:shared` → `npm run typecheck` → `npm test` → `npm run build`, as one sequential job so each stage gates the next, matching PRD 09 §9.5's pipeline shape for the CI half. A `concurrency` group cancels superseded runs on the same ref/PR.
+
+**Real finding from verifying this, not guessed at**: `shared/dist` is gitignored, and nothing in the existing `typecheck`/`test`/`build` root scripts rebuilds it first — they all silently work today only because a previously-built `shared/dist` has been sitting in every developer's working tree since Phase 1 and never got cleaned. On a genuinely fresh checkout (what CI does), `tsc --noEmit` for server/client would fail to resolve `@platform/shared`'s types, since its `package.json` points `main`/`module`/`types` at `./dist/...`. Confirmed by `rm -rf shared/dist server/dist client/dist` locally and re-running the exact step sequence the workflow specifies — typecheck does fail without an explicit `build:shared` step first. The workflow therefore builds `shared` immediately after `npm ci`, before typecheck/test/build, with a comment explaining why. The existing Husky `pre-push` hook (`npm run typecheck && npm test`) has this same latent gap — it isn't a CI bug, but worth fixing there too eventually (see Technical Debt).
+
+**Scoping decisions, stated up front rather than guessed at silently:**
+
+- Asked the user how to split Phase 7 (it spans Docker/infra, security hardening, CI/CD, and observability/load-testing — each substantial and largely independent, the same kind of choice Phase 6b's notification channels presented). Recommended starting with Docker/infra (most foundational — CI's eventual image-build stage and load-testing both depend on it existing) but the user picked **CI/CD** instead, a deliberate override of the recommendation.
+- This pass covers only the CI half of PRD 09 §9.5's pipeline (lint/typecheck/test/build, gating every push/PR). The CD half — build & push Docker images, deploy to staging, smoke test, manual approval, deploy to production — is **not** written, because none of its prerequisites exist yet: no Dockerfiles, no container registry, no staging/prod environment or deploy credentials. Writing CD steps against infrastructure that doesn't exist would just be unverifiable YAML. Once the Docker/infra slice is picked up, this workflow is the natural place to extend with those stages.
+- No `npm audit` / dependency-audit gate was added even though PRD 08 §8.1 calls for one in CI — that's a security-hardening concern more than a CI-pipeline one, deferred to whenever the security-hardening slice is picked up (see Remaining Tasks), to keep this pass's scope to exactly what "CI/CD" was asked to mean: lint/typecheck/test/build.
+
+**Verified as close to live as possible without a GitHub remote**: this repo has no `git remote` configured, so the workflow cannot actually be triggered by a real push — there's no way to "live verify" a GitHub Actions run the way every other phase this session was verified in a real browser. As the closest available proxy, every step the workflow runs was executed locally, in the same order, from a clean `dist`-free state (`npm run lint`, `npm run build:shared`, `npm run typecheck`, `npm test`, `npm run build`), each confirmed passing individually — including the full **153/153** server test suite. This is a deliberate, disclosed limitation, not a skipped verification step.
+
+---
+
 # Current Work
 
-Nothing is currently mid-implementation. Phase 6 is fully done (6a, 6b, and now both halves of 6c) with no partial files or failing tests. The codebase is at a clean boundary between Phase 6 and Phase 7.
+Nothing is currently mid-implementation. Phase 6 is fully done. Phase 7 has its CI pipeline done with no partial files or failing tests; the other three Phase 7 slices (Docker/infra + S3 driver, security hardening, observability/load-testing) haven't been started.
 
 ---
 
@@ -140,12 +156,13 @@ Nothing is currently mid-implementation. Phase 6 is fully done (6a, 6b, and now 
 - [x] Dark mode, skeleton loaders, Framer Motion (Phase 6c)
 - [x] Full Swagger examples per endpoint (Phase 6c)
 
-## Phase 7 — Production Hardening (not started)
+## Phase 7 — Production Hardening (in progress)
 
 - [ ] Docker Compose + per-service Dockerfiles (none exist anywhere in the repo)
-- [ ] GitHub Actions CI/CD (`.github/workflows/` does not exist)
+- [x] GitHub Actions CI (lint/typecheck/test/build on push+PR — `.github/workflows/ci.yml`); CD continuation (image build/push, staging/prod deploy) deferred until Docker images + a deploy target exist
 - [ ] S3 storage driver (`server/src/storage/index.ts` currently throws "not implemented yet — Phase 7" for the `s3` driver; local driver is the only working one)
-- [ ] Load testing, observability/metrics, security-checklist pass
+- [ ] Security hardening: Redis-backed sliding-window rate limiting (currently in-memory), CSRF double-submit token for cookie routes, `npm audit` CI gate
+- [ ] Load testing (k6), observability (`/metrics`, real `/health/ready`), security-checklist pass
 
 ---
 
@@ -163,8 +180,10 @@ Nothing is currently mid-implementation. Phase 6 is fully done (6a, 6b, and now 
 
 # Technical Debt
 
-- No Docker Compose / Dockerfiles at all yet — local dev currently depends on cloud-hosted MongoDB Atlas + Upstash Redis per `README.md`, which works for solo dev but diverges from the PRD's documented Docker-first NFR story ([PRD 09](PRD/09-nfr-deployment-cicd.md)). Likely fine to defer to Phase 7 as planned, but flagging so it isn't forgotten.
-- No CI pipeline — lint/typecheck/test only run locally (via Husky pre-commit/pre-push hooks), nothing enforced on push/PR yet.
+- No Docker Compose / Dockerfiles at all yet — local dev currently depends on cloud-hosted MongoDB Atlas + Upstash Redis per `README.md`, which works for solo dev but diverges from the PRD's documented Docker-first NFR story ([PRD 09](PRD/09-nfr-deployment-cicd.md)). Likely fine to defer to the Phase 7 Docker/infra slice, but flagging so it isn't forgotten.
+- The Husky `pre-push` hook (`npm run typecheck && npm test`) has the same latent gap the new CI workflow had to work around: it never rebuilds `shared/dist` first, so it only works today because a previously-built `dist` happens to already be sitting in the working tree. Harmless for now since every active dev's tree already has it built, but a genuinely fresh clone's first `git push` would fail confusingly. Worth adding a `build:shared` step to the hook to match the CI workflow.
+- The Vite client build emits a "chunk larger than 500kB" warning (`pdf.worker.min.mjs` at ~1.2MB, the main bundle at ~1.17MB) — not an error, build succeeds, but worth a code-splitting pass (dynamic `import()` for the PDF preview/designer routes, `manualChunks`) at some point before this is genuinely production-deployed.
+- CD (the deploy half of CI/CD) intentionally isn't written yet — it depends on Docker images and a real staging/prod deploy target, neither of which exist. Once the Docker/infra Phase 7 slice lands, extend `.github/workflows/ci.yml` with the build-and-push-image/deploy-staging/smoke-test/manual-approval/deploy-prod stages per [PRD 09 §9.5](PRD/09-nfr-deployment-cicd.md).
 - Rate limiting middleware (`server/src/middleware/rate-limit.ts`) exists from Phase 1 but should be revisited now that Redis is actually load-bearing (the render queue) to confirm it's using a sliding-window Redis store rather than in-memory, per [PRD 05 §5.14](PRD/05-api-design.md).
 - No project-level "run/verify this app" skill exists yet — verifying the Designer UI required improvising an ephemeral-Mongo + Playwright setup from scratch in a scratch temp directory. Worth capturing as a real project skill (e.g. via `/run-skill-generator`) before the next UI-heavy phase, so it doesn't need re-deriving.
 - The Designer's table-element column editor is raw JSON, not a visual column builder — fine for an admin comfortable with the schema, but worth a real UI before Phase 4 is considered "polished" (tracked here, not blocking Phase 5).
@@ -186,10 +205,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Start Phase 7 — Production Hardening, the only roadmap phase left.** Phase 6 is fully done (Dashboard, Notifications, and both halves of Polish — Swagger/OpenAPI and the dark-mode/skeleton/animation pass). Phase 7 covers: Docker Compose + per-service Dockerfiles (none exist anywhere in the repo today — local dev depends on cloud-hosted MongoDB Atlas + Upstash Redis), GitHub Actions CI/CD (`.github/workflows/` doesn't exist; lint/typecheck/test only run locally via Husky hooks), the S3 storage driver (currently throws "not implemented yet"), and load testing/observability/a security-checklist pass. Given the size, this phase likely needs its own scoping pass (Docker+CI is one natural chunk, S3+storage-hardening another, load-testing+observability a third) — recommend asking the user how they want it split, similar to how Phase 6b's three channels were scoped. Two small pre-existing bugs remain unfixed and could be picked off opportunistically: Known Issues #6 (`CustomersPage` empty-string email validation) and #7 (theme toggle/org-default disagreement, newly flagged this session).
+**Continue Phase 7 with one of the three remaining slices: Docker/infra + S3 driver, security hardening, or observability/load-testing.** The CI half of CI/CD is done. Docker/infra (Docker Compose, per-service Dockerfiles, the real S3 storage driver against MinIO) is still the most foundational of what's left — CD's eventual image-build stage and load-testing both need it to exist — but ask the user again rather than assume, since they overrode the recommendation last time. Security hardening (Redis-backed rate limiting, CSRF tokens, `npm audit` gate) and observability/load-testing (`/metrics`, real `/health/ready`, k6) are the other two candidates. Two small pre-existing bugs remain unfixed and could be picked off opportunistically: Known Issues #6 (`CustomersPage` empty-string email validation) and #7 (theme toggle/org-default disagreement).
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 6a (Dashboard real data), Phase 6b (Notifications: toast, in-app, and a real `nodemailer`+BullMQ email worker), and both halves of Phase 6c (Swagger/OpenAPI documentation for all 64 endpoints, then dark mode/skeleton loaders/empty states/Framer Motion animations), all verified live in a browser; see `docs/SESSION_LOG.md` for this session's entries. **Phase 6 is now fully complete.** Phase 7 (Production Hardening) is the only roadmap phase left.
+2026-06-29 — completed Phase 6 in full (Dashboard, Notifications, and both halves of Polish), then started Phase 7 (Production Hardening) with a GitHub Actions CI workflow (lint/typecheck/test/build on every push/PR) — the user chose this slice over the recommended Docker/infra one. See `docs/SESSION_LOG.md` for this session's entries. Docker/infra + S3 driver, security hardening, and observability/load-testing remain in Phase 7.

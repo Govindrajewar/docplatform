@@ -4,6 +4,41 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 7, partial — CI pipeline)
+
+**Branch:** `main`
+**Commit at session start:** `71f9cbb` (feat: add dark mode, skeleton loaders, empty states, and animations) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; with Phase 6 fully closed out, `docs/IMPLEMENTATION_STATUS.md` pointed at Phase 7 (Production Hardening) — the last roadmap phase. Phase 7 spans four largely-independent slices (Docker/infra + S3 driver, security hardening, CI/CD, observability/load-testing), each substantial enough to be its own pass, the same kind of choice Phase 6b's three notification channels presented. Asked the user via `AskUserQuestion`, recommending Docker/infra first (most foundational — CI's eventual image-build stage and load-testing both depend on it existing). **The user chose CI/CD instead**, overriding the recommendation.
+
+### Work completed
+
+- `.github/workflows/ci.yml` (new) — runs on every push (any branch) and PR targeting `main`: checkout → Node 20 (npm-cached) → `npm ci` → lint → `build:shared` → typecheck → test → build, as one sequential job (each step gates the next, matching PRD 09 §9.5's pipeline shape). A `concurrency` group cancels superseded runs on the same ref.
+- Scoped this pass to the CI half only, stated up front: the CD half (build & push Docker images, deploy to staging, smoke test, manual approval, deploy to production) isn't written, because none of its prerequisites exist — no Dockerfiles, no registry, no staging/prod environment. That's the Docker/infra slice the user didn't pick.
+- Deliberately left out an `npm audit` CI gate (PRD 08 §8.1 calls for one) — judged that as a security-hardening concern, not a CI-pipeline one, and out of scope for what "CI/CD" was asked to mean here.
+- **Real finding, not guessed at**: `shared/dist` is gitignored, and none of the root `typecheck`/`test`/`build` scripts (or the Husky `pre-push` hook, which runs `npm run typecheck && npm test`) rebuild it first. Everything has worked so far only because a previously-built `dist` has been sitting in the working tree since Phase 1 and never got cleaned. Confirmed the gap by `rm -rf shared/dist server/dist client/dist` and re-running the exact step sequence the new workflow specifies — typecheck genuinely fails without an explicit `build:shared` step first on a clean tree, exactly what a real CI checkout would hit. Fixed by adding that step to the workflow (with a comment explaining why) and flagging the same gap in the Husky hook as Technical Debt.
+
+### Bugs fixed
+
+- None in product code (no source files touched, just the new workflow file).
+
+### New issues discovered
+
+- The Husky `pre-push` hook has the same `shared/dist`-not-rebuilt gap the CI workflow had to route around — harmless today since every active dev's tree already has `dist` built, but a fresh clone's first push would fail confusingly. Flagged in Technical Debt, not fixed this pass (out of scope — this pass was about adding CI, not patching the pre-existing local hooks).
+- The Vite client build emits a "chunk larger than 500kB" warning (main bundle ~1.17MB, the PDF.js worker ~1.2MB) — noticed while verifying the `build` step locally. Not an error, not a regression, but flagged in Technical Debt as a future code-splitting opportunity.
+
+### Verification note
+
+This repo has no `git remote` configured, so the workflow cannot actually be triggered by a real GitHub Actions run — unlike every other phase this session, which was verified live in a real browser, there's no equivalent "watch it actually run" step available here. As the closest practical proxy, every step the workflow specifies was run locally, in the same order, starting from a `dist`-free tree (mirroring a fresh CI checkout): lint, `build:shared`, typecheck, the full test suite (**153/153 passing**), and the production build (client + server + shared) — each confirmed passing individually. This limitation is disclosed in `docs/IMPLEMENTATION_STATUS.md` rather than glossed over.
+
+### Remaining work
+
+Phase 7's CI slice is done. Docker/infra + the S3 storage driver, security hardening (Redis-backed rate limiting, CSRF, `npm audit` gate), and observability/load-testing (`/metrics`, real `/health/ready`, k6) are still untouched — see `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task". The CD half of this CI/CD workflow should be added once the Docker/infra slice exists.
+
+---
+
 ## Session — 2026-06-29 (Phase 6c, completes Phase 6 — dark mode, skeleton loaders, empty states, animations)
 
 **Branch:** `main`
