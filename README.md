@@ -2,7 +2,7 @@
 
 Enterprise Document Generation Platform — admins design document templates visually, users fill dynamic data, the platform renders pixel-perfect PDFs. See [docs/PRD/](docs/PRD/README.md) for the full architecture, and [docs/PRD/11-roadmap-and-phased-plan.md](docs/PRD/11-roadmap-and-phased-plan.md) for the phase plan this codebase follows.
 
-**Status:** Phase 1 — Foundation (auth, RBAC, organizations, users) is implemented.
+**Status:** Phases 1–3 are implemented — auth/RBAC/organizations/users (Phase 1), customers/assets/settings/audit-logs/search (Phase 2), and the headless PDF rendering engine (Phase 3). Phase 4's Templates + Field Definitions API is also implemented; its Designer UI (client-side) is not yet started. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for the current detailed status.
 
 ## Monorepo Layout
 

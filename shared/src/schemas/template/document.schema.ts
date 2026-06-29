@@ -30,7 +30,7 @@ const fieldDefinitionSchema = z.object({
 });
 export type FieldDefinition = z.infer<typeof fieldDefinitionSchema>;
 
-export const templateDocumentSchema = z.object({
+const templateDocumentShape = z.object({
   page: z.object({
     size: pageSizeSchema.default('A4'),
     orientation: z.enum(['portrait', 'landscape']).default('portrait'),
@@ -60,4 +60,28 @@ export const templateDocumentSchema = z.object({
   sections: z.array(sectionSchema).default([]),
   fields: z.array(fieldDefinitionSchema).default([]),
 });
-export type TemplateDocument = z.infer<typeof templateDocumentSchema>;
+
+/** Every element `id` in header/footer/sections, in document order — shared by the duplicate-id
+ * check below and by the template-diff/asset-reference helpers that walk the same tree shape. */
+function allElementIds(doc: z.infer<typeof templateDocumentShape>): string[] {
+  const trees = [doc.header?.elements ?? [], doc.footer?.elements ?? []];
+  for (const section of doc.sections) trees.push(section.elements);
+  return trees.flat().map((element) => element.id);
+}
+
+// PRD 10 §10.3: two elements sharing an `id` within one template is rejected at save time, before
+// it ever reaches the DB — enforced here so every caller (save, import, restore) gets it for free.
+export const templateDocumentSchema = templateDocumentShape.superRefine((doc, ctx) => {
+  const seen = new Set<string>();
+  for (const id of allElementIds(doc)) {
+    if (seen.has(id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate element id "${id}" — element ids must be unique within a template`,
+        path: ['sections'],
+      });
+    }
+    seen.add(id);
+  }
+});
+export type TemplateDocument = z.infer<typeof templateDocumentShape>;

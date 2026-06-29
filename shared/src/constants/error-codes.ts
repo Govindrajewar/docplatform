@@ -12,5 +12,6 @@ export const ERROR_CODES = [
   'TOKEN_EXPIRED',
   'INVALID_TOKEN',
   'LAST_ADMIN',
+  'STALE_VERSION',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

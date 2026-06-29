@@ -13,10 +13,12 @@ import { auditLogsRouter } from './modules/audit-logs/audit-logs.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { assetsRouter } from './modules/assets/assets.routes';
 import { customersRouter } from './modules/customers/customers.routes';
+import { fieldDefinitionsRouter } from './modules/field-definitions/field-definitions.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { organizationsRouter } from './modules/organizations/organizations.routes';
 import { searchRouter } from './modules/search/search.routes';
 import { settingsRouter } from './modules/settings/settings.routes';
+import { templatesRouter } from './modules/templates/templates.routes';
 import { usersRouter } from './modules/users/users.routes';
 
 export function createApp(): Express {
@@ -40,6 +42,8 @@ export function createApp(): Express {
   app.use('/api/v1/customers', customersRouter);
   app.use('/api/v1/assets', assetsRouter);
   app.use('/api/v1/search', searchRouter);
+  app.use('/api/v1/templates', templatesRouter);
+  app.use('/api/v1/field-definitions', fieldDefinitionsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
