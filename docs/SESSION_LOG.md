@@ -4,6 +4,38 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 6a — Dashboard real data)
+
+**Branch:** `main`
+**Commit at session start:** `2580b55` (feat: implement Phase 5c generation UI, completes Phase 5) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; `docs/IMPLEMENTATION_STATUS.md`'s "Next Recommended Task" pointed at Phase 6 (Dashboard, Notifications, Polish), recommending the Dashboard's real data first since it has the most existing data to surface. Scoped this pass to the Dashboard only, deferring Notifications (6b) and Polish (6c) — consistent with this session's established pattern of splitting phases into API-then-UI or single-then-bulk increments.
+
+### Work completed
+
+- `server/src/modules/dashboard/dashboard.service.ts` (new) — `getDashboardSummary(ctx, actorPermissions)`: customer/template/document/asset counts via `Promise.all`, documents-by-status via one `$group` aggregate, a 14-day documents-over-time series, combined assets+generated-PDF storage usage (the latter via a `$lookup` from `GeneratedPdf` to `Document`, since `GeneratedPdf` carries no `organizationId` of its own), and the 5 most recent documents. `recentActivity` (last 10 audit-log entries via the existing `auditLogsRepository.list`) is included only when `actorPermissions.includes('logs:read')`, checked inline rather than via route middleware, since the rest of the dashboard must stay visible to roles that lack it.
+- `server/src/modules/dashboard/dashboard.controller.ts`, `dashboard.routes.ts` (new) — `GET /dashboard/summary`, gated only by `authenticate` (no dedicated `dashboard` RBAC resource exists, and every role should see it). Wired into `server/src/app.ts`.
+- `server/tests/integration/dashboard.test.ts` (new, 4 tests) — KPI/chart/recent-documents correctness, cross-org isolation, the `logs:read` gate (admin sees `recentActivity`, a directly-inserted `editor` user does not), and unauthenticated rejection. Full server suite now **145/145 passing**.
+- `client/src/features/dashboard/api.ts` (new) — `useDashboardSummary()` TanStack Query hook.
+- `client/src/pages/DashboardPage.tsx` (rewrite) — replaced the 2-card stub with KPI cards (customers/templates/documents/storage), a dependency-free inline SVG bar chart for documents-over-time (no charting library is installed in the client, and none was added — consistent with the codebase's minimal-dependency approach), a recent-documents list, and a recent-activity list that simply doesn't render when the API returns `recentActivity: null`.
+- **Live-verified in a browser**: an ephemeral `mongodb-memory-server` + a local `redis-server.exe` on a scratch port 6390 (the same Redis binary used in Phase 5c's verification, not the project's real Upstash Redis nor the machine's own default-port Redis service) + the real Express app + the real Vite dev server, driven with Playwright. Confirmed: register → create customers/template/documents via direct API calls → Dashboard shows correct KPI counts, a non-empty bar chart, the recent-documents list, and (as admin, who holds `logs:read`) a populated recent-activity feed with real audit-log actions (`document.generate`, `template.publish`, etc.).
+
+### Bugs fixed
+
+- **Caught before any test ran, not by inspection**: the first draft of `dashboard.service.ts` compared the raw string `ctx.organizationId` directly inside `.aggregate()` `$match` stages. Mongoose auto-casts `.find()`/`.countDocuments()` filters against the schema, but does **not** cast `$match` stages inside aggregation pipelines — this is the first aggregation pipeline anywhere in the codebase, so there was no existing precedent to copy. Fixed by explicitly building `new Types.ObjectId(ctx.organizationId)` and using it in every `$match`, including the dotted `'document.organizationId'` match inside the `GeneratedPdf` → `Document` `$lookup`. Confirmed correct by the integration tests (which would have silently returned zero/empty results otherwise).
+
+### New issues discovered
+
+- None beyond what's already tracked. PRD 09's NFR calling for the dashboard KPI aggregate to be Redis-cached (60s TTL, background-refreshed) is not implemented — noted in `docs/IMPLEMENTATION_STATUS.md` as a possible follow-up once Phase 6b makes Redis usage habitual, not a blocker.
+
+### Remaining work
+
+Phase 6a is fully done. Phase 6b (Notifications — `nodemailer` + email worker, in-app/toast) is next, then Phase 6c (Polish — dark mode, skeleton loaders, animations, full Swagger) — see `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task".
+
+---
+
 ## Session — 2026-06-29 (Phase 5c — Generation UI, completes Phase 5)
 
 **Branch:** `main`

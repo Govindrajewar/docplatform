@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~70% complete** (5 of 7 roadmap phases fully shipped). Phase 5 (Document Generation) is now fully done, server and client. Phase 6 (Dashboard, Notifications, Polish) has not been started.
+**~75% complete** (5 of 7 roadmap phases fully shipped, Phase 6 in progress). Phase 5 (Document Generation) is fully done, server and client. Phase 6's first slice — real Dashboard data — is now done; Notifications and Polish remain.
 
 ---
 
 # Current Phase
 
-**Between Phase 5 and Phase 6.** Phase 5 (Document Generation) is complete end-to-end: single-document generation (sync fast-path + async BullMQ worker, regenerate, soft-delete, PDF retrieval), data import/bulk-generate (CSV/Excel/JSON parsing, column-mapping suggestion, per-row validation, batch tracking), and now the client UI for all of it (an auto-generated data-entry form, an import/mapping wizard, live batch-progress polling, and a Documents list page) — verified live in a browser with a real BullMQ worker actually consuming the queue, not just mocked. Phase 6 has not been started.
+**Phase 6 — Dashboard, Notifications, Polish (in progress).** Phase 6a (Dashboard real data) is complete: KPI cards, a documents-over-time chart, recent documents, storage usage, and a permission-gated recent-activity feed, server and client, verified live in a browser. Phase 6b (notifications — email worker, in-app/toast) and Phase 6c (polish — dark mode, skeleton loaders, animations, full Swagger) have not been started.
 
 ---
 
@@ -83,22 +83,32 @@ Client-side (`client/src/features/documents/`, `client/src/pages/TemplateGenerat
 
 **Real, separate bug found and fixed during this same cleanup pass:** the root `.gitignore`'s `storage/uploads/*` pattern doesn't match the actual storage location `server/storage/uploads/` (a path-with-slash gitignore pattern is anchored to the `.gitignore`'s own directory, not matched at any depth) — meaning real generated PDFs and uploaded assets under `server/storage/uploads/` were never actually excluded from git. Fixed by anchoring the pattern to `server/storage/uploads/*`.
 
+### Phase 6a — Dashboard Real Data ✅ (Phase 6 partial — see Remaining Tasks for 6b/6c)
+
+Server-side (`server/src/modules/dashboard/`): a single `getDashboardSummary(ctx, actorPermissions)` aggregate view (`GET /dashboard/summary`, gated only by `authenticate` — there's no dedicated `dashboard` RBAC resource, and every role should see it) covering customer/template/document/asset counts, documents-by-status, a 14-day documents-over-time series (one `$group` by `$dateToString`-truncated day), combined assets+generated-PDF storage usage (the latter via a `$lookup` against `Document` since `GeneratedPdf` has no `organizationId` of its own), and the 5 most recent documents. `recentActivity` (the last 10 raw audit-log entries) is included only when `actorPermissions.includes('logs:read')` — checked inline in the service rather than via route middleware, since the rest of the dashboard must stay visible to roles (editor/viewer) that lack `logs:read` per the real `ROLE_PERMISSIONS` matrix, even though PRD 01's prose suggests Viewer sees "dashboard, logs" together. 4 new integration tests (KPI correctness, cross-org isolation, the `logs:read` gate for admin vs. editor, unauthenticated rejection); full server suite **145/145 passing**.
+
+**Bug found and fixed before any test ran:** the first draft's aggregation `$match` stages compared the raw string `ctx.organizationId` against ObjectId-typed fields. Mongoose auto-casts `.find()`/`.countDocuments()` filters against the schema, but does **not** cast `$match` stages inside `.aggregate()` pipelines — this is the first aggregation pipeline anywhere in the codebase, so there was no existing precedent to follow. Fixed by explicitly building `new Types.ObjectId(ctx.organizationId)` and using it in every `$match` (including the dotted `'document.organizationId'` match inside the `GeneratedPdf` → `Document` `$lookup`).
+
+Client-side (`client/src/features/dashboard/api.ts`, `client/src/pages/DashboardPage.tsx`): a `useDashboardSummary()` query hook and a full rewrite of the previous 2-card stub into KPI cards (customers/templates/documents/storage), a dependency-free inline SVG bar chart for documents-over-time (no charting library installed in the client, and none added — consistent with the codebase's minimal-dependency approach), a recent-documents list, and a recent-activity list that simply doesn't render when the API returns `recentActivity: null`.
+
+**Verified live in a browser**: an ephemeral `mongodb-memory-server` + a local `redis-server.exe` on a scratch port (not the project's real Redis) + the real Express app + the real Vite dev server, driven with Playwright. Confirmed: register → create customers/template/documents via direct API calls → Dashboard renders correct KPI counts, a non-empty bar chart, the recent-documents list, and (as admin, who holds `logs:read`) a populated recent-activity feed with real audit-log actions.
+
 ---
 
 # Current Work
 
-Nothing is currently mid-implementation. Phase 5 is fully done (server and client, verified live with a real worker processing real queued jobs) with no partial files or failing tests. The codebase is at a clean phase boundary between Phase 5 and Phase 6.
+Nothing is currently mid-implementation. Phase 6a (Dashboard real data) is fully done with no partial files or failing tests. The codebase is at a clean boundary between Phase 6a and Phase 6b.
 
 ---
 
 # Remaining Tasks
 
-## Phase 6 — Dashboard, Notifications, Polish (not started)
+## Phase 6 — Dashboard, Notifications, Polish (in progress)
 
-- [ ] Real KPI cards/charts/recent-activity/storage-usage (current `DashboardPage.tsx` is a 2-card stub)
-- [ ] Install `nodemailer` (not present) + email worker
-- [ ] In-app/toast notifications, dark mode, skeleton loaders, Framer Motion
-- [ ] Full Swagger examples per endpoint
+- [x] Real KPI cards/charts/recent-activity/storage-usage (Phase 6a)
+- [ ] Install `nodemailer` (not present) + email worker (Phase 6b)
+- [ ] In-app/toast notifications, dark mode, skeleton loaders, Framer Motion (Phase 6c)
+- [ ] Full Swagger examples per endpoint (Phase 6c)
 
 ## Phase 7 — Production Hardening (not started)
 
@@ -142,10 +152,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Start Phase 6: Dashboard, Notifications, Polish.** Phase 5 is now fully done end-to-end (server + client, live-verified with a real worker). Phase 6 covers real KPI cards/charts/recent-activity/storage-usage on the Dashboard (currently a 2-card stub), installing `nodemailer` for an email worker, in-app/toast notifications, dark mode, skeleton loaders, and full Swagger examples per endpoint. Consider starting with the Dashboard's real data (it has the most existing data to surface — templates/documents/customers counts, recent activity from audit logs) before the lower-priority polish items (dark mode, animations).
+**Continue Phase 6: Notifications (6b), then Polish (6c).** Phase 6a (Dashboard real data) is done. Phase 6b covers installing `nodemailer` and building the email worker plus in-app/toast notifications (PRD 10 §10.9's retry/backoff, no-email-configured graceful skip, and deleted-entity notification snapshot edge cases haven't been implemented yet). Phase 6c (dark mode, skeleton loaders, Framer Motion animations, full Swagger examples per endpoint) is lower priority and can follow. A possible follow-up beyond the PRD's explicit Phase 6 scope: PRD 09's NFR calls for the dashboard KPI aggregate to be Redis-cached with a 60s TTL, background-refreshed — not implemented in 6a since Redis isn't yet load-bearing for anything read-heavy, but worth considering once 6b makes Redis usage habitual.
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 5 in full (Phase 5a single-document generation, Phase 5b data import/bulk-generate, Phase 5c the client generation UI), the last verified live in a browser with a real BullMQ worker; see `docs/SESSION_LOG.md` for this session's entry. Phase 6 has not been started.
+2026-06-29 — completed Phase 6a (Dashboard real data: KPI cards, documents-over-time chart, recent documents, storage usage, permission-gated recent activity), server and client, verified live in a browser; see `docs/SESSION_LOG.md` for this session's entry. Phase 6b (Notifications) and 6c (Polish) have not been started.
