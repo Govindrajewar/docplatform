@@ -12,7 +12,7 @@
 
 # Current Phase
 
-**Phase 7 — Production Hardening (in progress).** Phase 6 is fully done. Phase 7 covers four largely-independent slices: Docker Compose + Dockerfiles + the S3 storage driver, security hardening (Redis-backed rate limiting, CSRF), CI/CD, and observability/load-testing. Asked the user which to start with — they chose **CI/CD** over the Docker/infra slice this was originally recommended to start with. A GitHub Actions CI workflow (lint → typecheck → test → build) now runs on every push/PR. The CD half of the pipeline (Docker image build/push, staging/prod deploy, smoke tests) is deliberately not yet written — it depends on Docker images and a deploy target that don't exist yet (the Docker/infra slice). The other three slices (Docker/infra, security hardening, observability/load-testing) are still untouched.
+**Phase 7 — Production Hardening (in progress, development paused here for now).** Phase 6 is fully done. Phase 7 covers four largely-independent slices: Docker Compose + Dockerfiles + the S3 storage driver, security hardening (Redis-backed rate limiting, CSRF), CI/CD, and observability/load-testing. CI/CD's CI half is done (see below). The user then picked Docker/infra + S3 driver as the next slice, but **this development machine has no Docker installed** (confirmed via both Git Bash and a Windows `Get-Command`/Docker Desktop path check) — meaning `docker build`/`docker compose up` can't be run or verified here. Rather than write unverifiable Dockerfiles, the user chose to record this slice (plus the other two untouched ones) as a future enhancement and conclude development for now. **Nothing in this slice has been written yet** — see "Next Recommended Task" below for exactly where to resume.
 
 ---
 
@@ -156,11 +156,10 @@ Nothing is currently mid-implementation. Phase 6 is fully done. Phase 7 has its 
 - [x] Dark mode, skeleton loaders, Framer Motion (Phase 6c)
 - [x] Full Swagger examples per endpoint (Phase 6c)
 
-## Phase 7 — Production Hardening (in progress)
+## Phase 7 — Production Hardening (in progress, paused)
 
-- [ ] Docker Compose + per-service Dockerfiles (none exist anywhere in the repo)
+- [ ] **Docker Compose + per-service Dockerfiles + real S3 driver — blocked on Docker not being installed on this dev machine.** User-selected next slice, but writing Dockerfiles/compose with no way to `docker build`/`docker compose up` and verify them would mean shipping unverified infra config — deferred instead. Before resuming: install Docker Desktop (or any Docker engine) on the dev machine. Then: `docker/client.Dockerfile` (nginx serving the Vite build, SPA fallback + `/api` proxy to `server`), `docker/server.Dockerfile` + `docker/worker.Dockerfile` (same build stage, different `CMD` — `dist/server.js` vs `dist/workers/index.js` — per [PRD 09 §9.4](PRD/09-nfr-deployment-cicd.md)'s "one image, two run modes"), `docker/docker-compose.yml` (client/server/worker/mongo/redis/minio, plus a one-shot `mc mb` init step since MinIO doesn't auto-create buckets), and `server/src/storage/s3-storage.driver.ts` implementing the existing 3-method `StorageDriver` interface (`server/src/storage/storage-driver.ts`) via `@aws-sdk/client-s3` against MinIO's S3-compatible API (`forcePathStyle: true`). The S3 driver specifically _can_ be verified without Docker — by running a standalone MinIO binary directly (same pattern as this session's standalone `redis-server.exe` use) — so it doesn't strictly need to wait for Docker if picked up alone.
 - [x] GitHub Actions CI (lint/typecheck/test/build on push+PR — `.github/workflows/ci.yml`); CD continuation (image build/push, staging/prod deploy) deferred until Docker images + a deploy target exist
-- [ ] S3 storage driver (`server/src/storage/index.ts` currently throws "not implemented yet — Phase 7" for the `s3` driver; local driver is the only working one)
 - [ ] Security hardening: Redis-backed sliding-window rate limiting (currently in-memory), CSRF double-submit token for cookie routes, `npm audit` CI gate
 - [ ] Load testing (k6), observability (`/metrics`, real `/health/ready`), security-checklist pass
 
@@ -180,6 +179,7 @@ Nothing is currently mid-implementation. Phase 6 is fully done. Phase 7 has its 
 
 # Technical Debt
 
+- **No Docker installed on this dev machine** (`docker` is absent from PATH in both Git Bash and Windows; no Docker Desktop install found) — confirmed while attempting to start the Docker/infra Phase 7 slice. This blocks not just writing-and-verifying Dockerfiles/compose, but also live-verifying anything that would run _inside_ containers. Install Docker Desktop (or any Docker engine) before picking this slice back up, so the eventual Dockerfiles/compose/S3-driver work can be verified the same way every other phase this session was — by actually running it — rather than shipped on faith.
 - No Docker Compose / Dockerfiles at all yet — local dev currently depends on cloud-hosted MongoDB Atlas + Upstash Redis per `README.md`, which works for solo dev but diverges from the PRD's documented Docker-first NFR story ([PRD 09](PRD/09-nfr-deployment-cicd.md)). Likely fine to defer to the Phase 7 Docker/infra slice, but flagging so it isn't forgotten.
 - The Husky `pre-push` hook (`npm run typecheck && npm test`) has the same latent gap the new CI workflow had to work around: it never rebuilds `shared/dist` first, so it only works today because a previously-built `dist` happens to already be sitting in the working tree. Harmless for now since every active dev's tree already has it built, but a genuinely fresh clone's first `git push` would fail confusingly. Worth adding a `build:shared` step to the hook to match the CI workflow.
 - The Vite client build emits a "chunk larger than 500kB" warning (`pdf.worker.min.mjs` at ~1.2MB, the main bundle at ~1.17MB) — not an error, build succeeds, but worth a code-splitting pass (dynamic `import()` for the PDF preview/designer routes, `manualChunks`) at some point before this is genuinely production-deployed.
@@ -199,16 +199,22 @@ Nothing is currently mid-implementation. Phase 6 is fully done. Phase 7 has its 
 
 # Blockers
 
-None. The codebase is in a clean, fully-tested state with no partial work in progress.
+**Docker/infra Phase 7 slice is blocked**: no Docker engine is installed on this dev machine, so Dockerfiles/docker-compose can't be written-and-verified together. Not a code blocker — everything else in the codebase is clean, fully tested, with no partial work in progress. Install Docker before resuming that specific slice (see Technical Debt).
 
 ---
 
 # Next Recommended Task
 
-**Continue Phase 7 with one of the three remaining slices: Docker/infra + S3 driver, security hardening, or observability/load-testing.** The CI half of CI/CD is done. Docker/infra (Docker Compose, per-service Dockerfiles, the real S3 storage driver against MinIO) is still the most foundational of what's left — CD's eventual image-build stage and load-testing both need it to exist — but ask the user again rather than assume, since they overrode the recommendation last time. Security hardening (Redis-backed rate limiting, CSRF tokens, `npm audit` gate) and observability/load-testing (`/metrics`, real `/health/ready`, k6) are the other two candidates. Two small pre-existing bugs remain unfixed and could be picked off opportunistically: Known Issues #6 (`CustomersPage` empty-string email validation) and #7 (theme toggle/org-default disagreement).
+**Pick up one of the three remaining Phase 7 slices: Docker/infra + S3 driver (after installing Docker), security hardening, or observability/load-testing.** Development was deliberately paused here at the user's request rather than writing unverifiable Docker artifacts — see "Current Phase" and "Blockers" above for why. Of the three:
+
+- **Docker/infra + S3 driver** — was the user's pick before hitting the Docker-not-installed blocker. Install Docker Desktop (or any engine) first; then write `docker/{client,server,worker}.Dockerfile` + `docker/docker-compose.yml` (Mongo/Redis/MinIO) and `server/src/storage/s3-storage.driver.ts` (the existing `StorageDriver` interface, via `@aws-sdk/client-s3` against MinIO). The S3 driver alone _can_ be picked up and verified without Docker first, by running a standalone MinIO binary directly (same pattern as this session's standalone `redis-server.exe`), if that's preferred over waiting on a Docker install.
+- **Security hardening** — Redis-backed sliding-window rate limiting (closes Known Issue #2), CSRF double-submit tokens for cookie routes, an `npm audit` CI gate. Pure code, no new infra, fully verifiable today with no blockers.
+- **Observability + load-testing** — `/metrics`, a real `/health/ready`, a k6 script. Most useful once Docker Compose exists to run the full stack against, so probably sequence this after the Docker slice rather than before.
+
+Ask the user which, the same way the last two phase-scoping decisions were made — they've twice now picked differently from the recommendation. Two small pre-existing bugs remain unfixed and could be picked off opportunistically alongside whichever slice comes next: Known Issues #6 (`CustomersPage` empty-string email validation) and #7 (theme toggle/org-default disagreement).
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 6 in full (Dashboard, Notifications, and both halves of Polish), then started Phase 7 (Production Hardening) with a GitHub Actions CI workflow (lint/typecheck/test/build on every push/PR) — the user chose this slice over the recommended Docker/infra one. See `docs/SESSION_LOG.md` for this session's entries. Docker/infra + S3 driver, security hardening, and observability/load-testing remain in Phase 7.
+2026-06-30 — completed Phase 6 in full, then started Phase 7 with a GitHub Actions CI workflow (lint/typecheck/test/build on every push/PR). Attempted to start the Docker/infra + S3 driver slice next (the user's pick) but discovered Docker isn't installed on this dev machine, which blocks verifying Dockerfiles/compose the way every other phase this session was verified — by actually running it. Per the user's explicit instruction, recorded that slice (plus security hardening and observability/load-testing) as a future enhancement in Remaining Tasks/Technical Debt above, and concluded development here rather than ship unverified infra config. See `docs/SESSION_LOG.md` for the full session history.

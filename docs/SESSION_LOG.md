@@ -4,6 +4,42 @@
 
 ---
 
+## Session — 2026-06-30 (Phase 7 — Docker/infra slice paused, no code changes)
+
+**Branch:** `main`
+**Commit at session start:** `97849cc` (feat: add GitHub Actions CI pipeline) — no commit this entry, since nothing was written; this is a documentation-only update recording why.
+
+### Context
+
+Continuation of the same work. The user asked to start the next phase. Of Phase 7's three remaining slices (Docker/infra + S3 driver, security hardening, observability/load-testing), asked the user which to do next — they picked **Docker/infra + S3 driver**, the one originally recommended back when CI/CD was scoped.
+
+Before writing anything, checked whether Docker is actually available on this machine, since the chosen slice's whole point is producing Dockerfiles and a `docker-compose.yml` that should be verified by actually building and running them — the same standard every other phase this session was held to (live browser verification, real test suites, etc.). **Docker is not installed**: `docker` resolves to nothing in Git Bash, and a Windows-side check (`Get-Command docker`, `Get-Command docker.exe`, and a `Test-Path` for the Docker Desktop install location) all came back empty/false.
+
+Surfaced this to the user via `AskUserQuestion` before proceeding: write everything anyway with the Dockerfiles/compose unverified (only the S3 driver itself can be verified for real, via a standalone MinIO binary bypassing Docker entirely — the same pattern this session already used for standalone `redis-server.exe`), drop the Docker artifacts and do only the S3 driver this pass, or stop and install Docker first. **The user's answer**: record this slice as a future enhancement in the TODO/docs and conclude development for now, rather than write any of it.
+
+### Work completed
+
+None — no source files were touched this entry. The only changes are to `docs/IMPLEMENTATION_STATUS.md` (and this `SESSION_LOG.md` entry), recording:
+
+- The Docker/infra + S3 driver slice is explicitly **not started** — nothing was written, no half-finished Dockerfiles or driver stub left behind.
+- The reason: no Docker engine on this dev machine, confirmed by direct check rather than assumed.
+- What it'll take to resume: install Docker Desktop (or any engine), then write `docker/{client,server,worker}.Dockerfile` + `docker/docker-compose.yml` (Mongo/Redis/MinIO, plus an `mc mb` init step since MinIO doesn't auto-create buckets) and `server/src/storage/s3-storage.driver.ts` against the existing 3-method `StorageDriver` interface via `@aws-sdk/client-s3`, `forcePathStyle: true` for MinIO compatibility — all detailed in `docs/IMPLEMENTATION_STATUS.md`'s Phase 7 checklist and Technical Debt so a future session doesn't have to re-derive the plan from scratch.
+- A note that the S3 driver specifically doesn't have to wait for Docker if it's ever picked up on its own — it can be verified against a standalone MinIO binary, the same way Redis was run standalone earlier this session.
+
+### Bugs fixed
+
+None — no code was touched.
+
+### New issues discovered
+
+- **Docker is not installed on this dev machine** — added as both a Blocker and a Technical Debt entry in `docs/IMPLEMENTATION_STATUS.md`, since it affects more than just this one slice (any future container-based verification hits the same wall).
+
+### Remaining work
+
+Per the user's explicit instruction, development is concluded here for this session. Phase 7 has three untouched slices left (Docker/infra + S3 driver — blocked on a Docker install; security hardening; observability/load-testing), all fully detailed in `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task" for whenever work resumes.
+
+---
+
 ## Session — 2026-06-29 (Phase 7, partial — CI pipeline)
 
 **Branch:** `main`
