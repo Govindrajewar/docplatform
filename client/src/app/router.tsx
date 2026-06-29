@@ -7,8 +7,10 @@ import { AssetsPage } from '@/pages/AssetsPage';
 import { AuditLogsPage } from '@/pages/AuditLogsPage';
 import { CustomersPage } from '@/pages/CustomersPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { DocumentsPage } from '@/pages/DocumentsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { TemplateDesignerPage } from '@/pages/TemplateDesignerPage';
+import { TemplateGeneratePage } from '@/pages/TemplateGeneratePage';
 import { TemplatesPage } from '@/pages/TemplatesPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
@@ -31,6 +33,8 @@ export const router = createBrowserRouter([
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/templates', element: <TemplatesPage /> },
           { path: '/templates/:id/design', element: <TemplateDesignerPage /> },
+          { path: '/templates/:id/generate', element: <TemplateGeneratePage /> },
+          { path: '/documents', element: <DocumentsPage /> },
           { path: '/customers', element: <CustomersPage /> },
           { path: '/assets', element: <AssetsPage /> },
           { path: '/users', element: <UsersPage /> },

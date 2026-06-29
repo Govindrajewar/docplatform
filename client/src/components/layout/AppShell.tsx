@@ -1,5 +1,6 @@
 import {
   FileClock,
+  FileStack,
   FileText,
   LayoutDashboard,
   Image,
@@ -18,6 +19,7 @@ import { useAuthStore } from '@/stores/auth.store';
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/templates', label: 'Templates', icon: FileText },
+  { to: '/documents', label: 'Documents', icon: FileStack },
   { to: '/customers', label: 'Customers', icon: UsersRound },
   { to: '/assets', label: 'Assets', icon: Image },
   { to: '/users', label: 'Users', icon: Users },

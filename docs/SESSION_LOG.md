@@ -4,6 +4,47 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 5c — Generation UI, completes Phase 5)
+
+**Branch:** `main`
+**Commit at session start:** `1ca1b8e` (feat: implement Phase 5b data import + bulk-generate) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; `docs/IMPLEMENTATION_STATUS.md`'s "Next Recommended Task" pointed at Phase 5c, the client UI for the now-complete Phase 5 API. Studied existing client conventions (`CustomersPage`/`TemplatesPage`, the `api.ts` + TanStack Query + axios `unwrap` pattern, the `openAssetFile` blob-download pattern) before writing anything.
+
+### Work completed
+
+- `client/src/features/documents/api.ts` (new) — TanStack Query hooks for the full Documents surface: `useDocuments` (auto-polls every 3s while any row is `generating`), `useCreateDocument`, `useRegenerateDocument`, `useDeleteDocument`, `openDocumentPdf` (blob-fetch + new-tab, mirroring `openAssetFile` since the PDF route needs the in-memory Bearer token), `useImportPreview` (multipart upload), `useBulkGenerate`, `useBatch` (polls every 1.5s until `completed + failed >= total`).
+- `client/src/features/templates/api.ts` — added `useTemplateVersion(templateId, versionId)`, fetching a _specific_ version rather than `useTemplate`'s `latestVersion` — generation validates and renders against `currentVersionId` specifically, which can be older than the newest draft, so the generate form's fields must come from that exact version.
+- `client/src/lib/path.ts` (new) — a client-side `setByPath`, mirroring `server/src/modules/documents/path.ts`, so the single-document generate form can build the same nested `dataPayload` shape the engine's `getByPath` token resolver expects.
+- `client/src/pages/TemplateGeneratePage.tsx` (new) — two flows on one page: **Generate one document** (inputs auto-built from the template's _published_ version `fields[]`, type-appropriate per field type, a customer `<select>`, client-side required-field check before submit) and **Bulk import** (file picker → preview from `/documents/import` → an editable mapping table pre-filled from the server's suggested mapping, plus an optional "Customer ID" column mapping → confirm → `/documents/bulk-generate` → a live batch-progress panel with per-row failure reasons).
+- `client/src/pages/DocumentsPage.tsx` (new) — org-wide document list (template name resolved client-side via `useTemplates`), status filter, inline failure reasons, download/regenerate/delete actions, auto-polling while anything is generating.
+- Wired `/templates/:id/generate` and `/documents` into the router and nav (`FileStack` icon); added a "Generate" link on each published template's row in `TemplatesPage`.
+- Full verification pass: `npm run typecheck` (all 3 workspaces), `npm run lint` (clean after one auto-format pass), full server suite **141/141 passing** (unchanged — this session was client-only).
+- **Live-verified in a browser**, and this time pushed further than prior UI verifications by actually running the async path for real: an ephemeral `mongodb-memory-server`, a scratch local `redis-server.exe` on port 6390 (a Redis binary already installed on this machine — not the project's real Upstash Redis, and not the machine's own default-port Redis service either), the real Express app, a **real BullMQ worker process** (the same `createRenderWorker()` code `npm run worker` runs, not mocked), and the real Vite dev server, driven with Playwright. Confirmed end-to-end: register → create + publish a template with two fields via direct API calls (the Designer has no fields[] editor, so this step can't go through the UI yet — see New issues discovered) → Generate page renders the right inputs for both fields → single-document generate returns "generated" synchronously → CSV upload previews 3 rows and auto-maps both columns to their matching headers → confirming enqueues 3 real BullMQ jobs → the real worker drains the queue → batch progress panel reaches 3/3 generated, 0 failed → Documents page lists all 4 documents as generated → Download opens a real PDF blob in a new tab, Regenerate re-renders, Delete empties the list back to the "no documents yet" state.
+
+### Bugs fixed
+
+- **Registration 500'd against the ephemeral verify environment** — not an app bug; the verify script's `mongodb-memory-server` instance had no seeded system roles (registration looks up the "owner" role by name), unlike the integration test suite's `beforeAll`. Fixed the verify script itself to seed `SYSTEM_ROLES`/`ROLE_PERMISSIONS` the same way `tests/integration/*.test.ts` do.
+- **Real, separate bug, found incidentally while cleaning up verification artifacts**: the root `.gitignore`'s `storage/uploads/*` pattern doesn't actually match `server/storage/uploads/` — a gitignore pattern containing a slash is anchored to the `.gitignore` file's own directory, not matched at any depth, so real generated PDFs and uploaded assets were never actually excluded from git. Caught because my own verification session's generated PDFs showed up as untracked files. Fixed by anchoring the pattern to `server/storage/uploads/*`.
+- (Test-script-only, not app code) An early verification run's Playwright selector matched 3 `<select>` elements instead of 1, because `<option>` text content inside a closed `<select>` counts toward Playwright's `hasText` row filter even when unselected — fixed the throwaway script's selector, not a product issue.
+
+### New issues discovered
+
+- The Designer still has no UI for editing a template's `fields[]` array — Phase 5c's live verification had to set fields via direct API calls, bypassing the UI entirely, because there's nowhere in the Designer to declare them. Anyone restricted to the UI today can't make a template's Generate page show anything beyond the "no fields declared" fallback. Flagged in `docs/IMPLEMENTATION_STATUS.md` Technical Debt as worth a real pass, not blocking Phase 6.
+- `POST /documents` (single-document create, unlike `bulk-generate`) still does no server-side field validation/coercion — the new Generate page does its own client-side required-field check, but a non-UI caller could still submit incomplete data. Pre-existing scope from Phase 5a, just more visible now that a UI sits in front of it.
+
+### Remaining work
+
+Phase 5 is fully done. Phase 6 (Dashboard, Notifications, Polish) is next per the roadmap — see `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task".
+
+### Recommended next steps
+
+Start Phase 6 with the Dashboard's real data (KPI cards/recent-activity/storage-usage, since templates/documents/customers/audit-logs all already exist to surface), before the lower-priority polish items (dark mode, toasts, Framer Motion, full Swagger examples).
+
+---
+
 ## Session — 2026-06-29 (Phase 5b — Data import + bulk-generate)
 
 **Branch:** `main`

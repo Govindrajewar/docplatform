@@ -138,6 +138,18 @@ export function useTemplateVersions(templateId: string | undefined, page = 1, li
   });
 }
 
+/** Fetches the *published* version specifically (not just the latest draft `useTemplate`
+ * returns) — generation validates and renders against `currentVersionId`, so the generate
+ * form's fields must come from that exact version, not whatever is newest in the designer. */
+export function useTemplateVersion(templateId: string | undefined, versionId: string | undefined) {
+  return useQuery({
+    queryKey: ['templates', templateId, 'versions', versionId],
+    queryFn: () =>
+      unwrap<TemplateVersionItem>(api.get(`/templates/${templateId}/versions/${versionId}`)),
+    enabled: Boolean(templateId && versionId),
+  });
+}
+
 export function useSaveTemplateVersion() {
   const queryClient = useQueryClient();
   return useMutation({

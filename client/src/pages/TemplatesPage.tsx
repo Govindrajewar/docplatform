@@ -149,6 +149,14 @@ export function TemplatesPage() {
                     <td className="py-2 capitalize">{t.status}</td>
                     <td className="py-2 text-right">
                       <div className="flex justify-end gap-1">
+                        {t.currentVersionId && (
+                          <Link
+                            to={`/templates/${t._id}/generate`}
+                            className="inline-flex h-9 items-center rounded-md px-3 text-sm font-medium hover:bg-muted"
+                          >
+                            Generate
+                          </Link>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"

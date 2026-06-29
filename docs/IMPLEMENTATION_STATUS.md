@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~65% complete** (4 of 7 roadmap phases fully shipped, Phase 5 done server-side). The only thing standing between here and "Phase 5 fully complete" is the client-side generate/import UI — there is no remaining server-side work in this phase.
+**~70% complete** (5 of 7 roadmap phases fully shipped). Phase 5 (Document Generation) is now fully done, server and client. Phase 6 (Dashboard, Notifications, Polish) has not been started.
 
 ---
 
 # Current Phase
 
-**Between Phase 5 and Phase 6.** Phase 5 (Document Generation) is complete server-side: single-document generation (sync fast-path + async BullMQ worker, regenerate, soft-delete, PDF retrieval) and data import/bulk-generate (CSV/Excel/JSON parsing, column-mapping suggestion, per-row validation, batch tracking) are both implemented and tested via the API. The corresponding client UI (data-entry form, import-mapping screen, batch progress, documents list/detail pages) has not been built.
+**Between Phase 5 and Phase 6.** Phase 5 (Document Generation) is complete end-to-end: single-document generation (sync fast-path + async BullMQ worker, regenerate, soft-delete, PDF retrieval), data import/bulk-generate (CSV/Excel/JSON parsing, column-mapping suggestion, per-row validation, batch tracking), and now the client UI for all of it (an auto-generated data-entry form, an import/mapping wizard, live batch-progress polling, and a Documents list page) — verified live in a browser with a real BullMQ worker actually consuming the queue, not just mocked. Phase 6 has not been started.
 
 ---
 
@@ -73,22 +73,25 @@ Server-side (`server/src/modules/documents/`): `import-parsing.ts` (CSV via `csv
 
 **Deliberate scoping decision:** "Customer referenced in import data doesn't exist yet" (PRD 10 §10.6) only implements the _reject_ branch (a row with an unknown `customerId` fails with a clear per-row reason) — the _auto-create-customer-from-inline-data_ branch is not implemented. The PRD itself frames this as "an explicit checkbox in the mapping UI," which doesn't exist yet in this backend-only pass; building real fuzzy name/email matching for auto-create is its own scoped piece of work, tracked in Technical Debt rather than guessed at here.
 
+### Phase 5c — Generation UI ✅ (completes Phase 5)
+
+Client-side (`client/src/features/documents/`, `client/src/pages/TemplateGeneratePage.tsx`, `DocumentsPage.tsx`): a `TemplateGeneratePage` (linked from each published template's row on `TemplatesPage` via a new "Generate" action) with two flows — **Generate one document** (a form auto-built from the template's _published_ version `fields[]`, fetched via a new `useTemplateVersion` hook rather than `useTemplate`'s `latestVersion`, since generation validates against `currentVersionId` specifically, which can differ from the newest draft) with per-type inputs and client-side required-field checking before submit, and **Bulk import** (file picker → `POST /documents/import` preview → an editable column-mapping table pre-filled from the server's suggested mapping → confirm → `POST /documents/bulk-generate` → a live batch-progress panel polling `GET /documents/batches/:batchId` until every row resolves, surfacing per-row failure reasons). A new `DocumentsPage` lists every document org-wide (template name resolved client-side from `useTemplates`, status, failure reason inline, download/regenerate/delete), auto-polling while anything is `generating`.
+
+**Verified live in a browser**, including the previously test-only async path actually working end-to-end: an ephemeral `mongodb-memory-server` + a local `redis-server.exe` on a scratch port (not the project's real Redis) + the real Express app + a real BullMQ worker process (`createRenderWorker()`, the same code `npm run worker` runs) + the real Vite dev server, driven with Playwright. Confirmed: register → create+publish a template with two fields via direct API calls (the Designer has no fields[] editor yet — a pre-existing, already-documented simplification) → generate page renders the right inputs → single-document generate succeeds synchronously → CSV upload previews and auto-maps both columns correctly → confirming bulk-generate enqueues 3 jobs → the real worker drains the queue → batch progress reaches 3/3 generated, 0 failed → Documents page lists all 4 documents as generated → download opens a real PDF blob, regenerate re-renders, delete empties the list.
+
+**Bug found during verification (test-script-side, not app-side):** the verification script's own Playwright selector strategy was ambiguous (matched 3 elements instead of 1) — not a product bug, just a reminder that `<option>` text content inside a `<select>` counts toward Playwright's `hasText` filter even when unselected.
+
+**Real, separate bug found and fixed during this same cleanup pass:** the root `.gitignore`'s `storage/uploads/*` pattern doesn't match the actual storage location `server/storage/uploads/` (a path-with-slash gitignore pattern is anchored to the `.gitignore`'s own directory, not matched at any depth) — meaning real generated PDFs and uploaded assets under `server/storage/uploads/` were never actually excluded from git. Fixed by anchoring the pattern to `server/storage/uploads/*`.
+
 ---
 
 # Current Work
 
-Nothing is currently mid-implementation. Phase 5 closed out cleanly server-side (single-document generation + data import/bulk-generate, fully tested) with no partial files or failing tests. The codebase is at a clean phase boundary — only the client UI for Phase 5 remains, alongside Phase 6/7.
+Nothing is currently mid-implementation. Phase 5 is fully done (server and client, verified live with a real worker processing real queued jobs) with no partial files or failing tests. The codebase is at a clean phase boundary between Phase 5 and Phase 6.
 
 ---
 
 # Remaining Tasks
-
-## Phase 5c — Generation UI (not started)
-
-- [ ] Auto-generated data-entry form driven by the template's current version `fields[]` (client)
-- [ ] Import-mapping screen calling `/documents/import` (file upload → preview → editable column mapping → confirm) and `/documents/bulk-generate`
-- [ ] Batch progress UI polling `/documents/batches/:batchId`
-- [ ] Client-side documents list/detail pages (status, regenerate, download, delete)
 
 ## Phase 6 — Dashboard, Notifications, Polish (not started)
 
@@ -112,6 +115,7 @@ Nothing is currently mid-implementation. Phase 5 closed out cleanly server-side 
 2. **Redis is now load-bearing only for the render queue, not for rate limiting** — the BullMQ queue (`server/src/queues/render.queue.ts`) is the first real consumer of Redis, but [PRD 09](PRD/09-nfr-deployment-cicd.md)'s Redis-backed sliding-window rate limiting still isn't implemented (`server/src/middleware/rate-limit.ts` predates this and should be revisited — see Technical Debt).
 3. **S3 storage driver throws on use** (`server/src/storage/index.ts:11`) — intentional Phase 7 placeholder, not a bug, but worth flagging so nobody sets `STORAGE_DRIVER=s3` in any deployed env before Phase 7.
 4. **Root and BullMQ-bundled `ioredis` are two different installed versions** (npm couldn't dedupe them because BullMQ pins an exact version) — harmless at runtime, but means any future code that needs an `IORedis` instance typed against BullMQ's `Queue`/`Worker` connection option must build a plain `RedisOptions` object (see `queues/redis-connection.ts`) rather than constructing its own client, or it won't typecheck.
+5. **`POST /documents` (single-document create) does no server-side field coercion/validation** — only `bulk-generate`'s rows go through `validateAndCoerceRow`. The new Generate page does its own required-field check and type coercion client-side before submitting, but a non-UI API caller can still create a document with missing required fields or wrong-typed values; the engine just renders blanks/raw strings rather than rejecting. Pre-existing scope from Phase 5a, just now more visible with a UI in front of it.
 
 ---
 
@@ -125,6 +129,8 @@ Nothing is currently mid-implementation. Phase 5 closed out cleanly server-side 
 - Regenerating a document leaves its previous PDF blob orphaned in storage (only the `GeneratedPdf` DB row is replaced via upsert, not the old file on disk/S3) — fine for the local driver during development, but worth a cleanup pass (delete-on-replace, or a GC sweep) before Phase 7's storage hardening.
 - Bulk-import customer linking only supports an existing `customerId` per row; it rejects rows that reference a customer that doesn't exist yet rather than auto-creating one from inline name/email/phone data — the PRD's other documented branch (10 §10.6), deliberately deferred (see Phase 5b above) since it needs real fuzzy matching and an explicit UI checkbox, not a backend guess.
 - `exceljs`'s bundled types resolve `Buffer` against a much older nested `@types/node` (pulled in transitively via its `@fast-csv` dependency), causing a structural-type mismatch at the one call site that loads a workbook (`import-parsing.ts`) — worked around with a narrow cast to whatever `load()` actually declares. Harmless (Buffer is Buffer at runtime), but a reminder that any other exceljs API touching `Buffer` may need the same treatment.
+- The Designer UI still has no editor for a template's `fields[]` array (verifying Phase 5c required setting fields via direct API calls, bypassing the Designer entirely, same as the live-verification workaround noted under Phase 4) — anyone using only the UI today has no way to declare a template's fields, which the new Generate page and import mapping both depend on. Worth a real fields-editor pass before Phase 5 is considered "polished" end-to-end, though it doesn't block Phase 6.
+- No project-level "run/verify this app" skill exists yet (still true after a second from-scratch improvisation this session, now additionally needing a local Redis instance alongside ephemeral Mongo + Playwright) — increasingly worth capturing via `/run-skill-generator` rather than re-deriving a third time.
 
 ---
 
@@ -136,10 +142,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Start Phase 5c: the Generation UI**, the only piece left before Phase 5 is fully done end-to-end — an auto-generated data-entry form driven by `template.fields[]`, an import-mapping screen wired to `/documents/import` + `/documents/bulk-generate`, a batch-progress view polling `/documents/batches/:batchId`, and basic documents list/detail pages. Alternatively, if UI work is being deferred for now, the next backend-shaped option is Phase 6 (dashboard/notifications) per the roadmap. Same sequencing rationale as every prior phase: the API existing first is what made this UI buildable against something real rather than mocked.
+**Start Phase 6: Dashboard, Notifications, Polish.** Phase 5 is now fully done end-to-end (server + client, live-verified with a real worker). Phase 6 covers real KPI cards/charts/recent-activity/storage-usage on the Dashboard (currently a 2-card stub), installing `nodemailer` for an email worker, in-app/toast notifications, dark mode, skeleton loaders, and full Swagger examples per endpoint. Consider starting with the Dashboard's real data (it has the most existing data to surface — templates/documents/customers counts, recent activity from audit logs) before the lower-priority polish items (dark mode, animations).
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 5 server-side (Phase 5a single-document generation + Phase 5b data import/bulk-generate); see `docs/SESSION_LOG.md` for this session's entry. Only the client-side generation UI (Phase 5c) remains before Phase 5 is fully done.
+2026-06-29 — completed Phase 5 in full (Phase 5a single-document generation, Phase 5b data import/bulk-generate, Phase 5c the client generation UI), the last verified live in a browser with a real BullMQ worker; see `docs/SESSION_LOG.md` for this session's entry. Phase 6 has not been started.

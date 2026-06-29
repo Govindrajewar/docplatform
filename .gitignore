@@ -12,7 +12,7 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
-storage/uploads/*
-!storage/uploads/.gitkeep
+server/storage/uploads/*
+!server/storage/uploads/.gitkeep
 *.tsbuildinfo
 .turbo/
