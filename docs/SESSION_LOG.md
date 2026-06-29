@@ -4,6 +4,65 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 4 Designer UI — completes Phase 4)
+
+**Branch:** `main`
+**Commit at session start:** `705b5b78ffe199920b720289d4ad86bcaea4b2f2` (feat: implement Phase 4 Templates + Field Definitions API) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's Phase 4 work. The backend API landed in the previous session; this session builds the client-side Designer UI it was missing, completing Phase 4's exit criteria.
+
+### Work completed
+
+- Studied existing client conventions (`CustomersPage`/`AssetsPage`, the `api.ts` + TanStack Query + axios `unwrap` pattern, Card/Button/Input UI primitives, zustand for UI-only state) before writing anything, to match the established style rather than introduce a new one.
+- `client/src/features/templates/api.ts` + `client/src/features/field-definitions/api.ts` — TanStack Query hooks for every Templates/Field-Definitions endpoint, including a `usePreviewTemplate` mutation that requests a `blob` response but still surfaces the underlying JSON error message on failure (axios's blob `responseType` otherwise swallows error bodies).
+- `client/src/stores/designer.store.ts` — a zustand store holding the draft `TemplateDocument`, current selection, and an "active container" (where the palette adds the next element), with targeted mutation actions (`addElement`/`updateElement`/`removeElement`/`addSection`/`removeSection`/`setPage`/`setTheme`) rather than a generic deep-merge.
+- `client/src/features/templates/designer/`: `Canvas.tsx` + `ElementBox.tsx` (pointer-event drag-to-move and corner-handle resize, 1pt=1px, no zoom in v1), `page-sizes.ts` (A4/LETTER/LEGAL point dimensions), `ElementPalette.tsx` (14 element types, each constructed via `elementSchema.parse()` so new elements are valid against the exact same schema the server enforces), `PropertyPanel.tsx` (common fields + type-specific controls for ~10 types, raw-JSON fallback for table columns), `PreviewPane.tsx` (pdfjs-dist rendering of the real preview-endpoint PDF onto a canvas, with page navigation), `VersionHistoryPanel.tsx` (list/publish/restore/a basic two-version compare).
+- `client/src/pages/TemplatesPage.tsx` (list/create/duplicate/archive/export/import) and `TemplateDesignerPage.tsx` (three tabs: Design/Preview/History; loads the template once per version-id to avoid clobbering in-progress edits on refetch; Save Draft posts with `baseVersionNumber` for optimistic concurrency).
+- Installed `pdfjs-dist`; added `client/src/lib/pdfjs.ts` to centralize the `GlobalWorkerOptions.workerSrc` setup (Vite `?url` import of the worker bundle).
+- Wired `/templates` and `/templates/:id/design` into the router and the sidebar nav.
+- **Verified live in a browser**, since no project skill existed for running this app: spun up an ephemeral `mongodb-memory-server` + the real `createApp()` Express server (via a throwaway script, deleted afterward) on port 4000, the real Vite client dev server on 5173, installed Playwright to a scratch temp directory (not added to the repo), and drove the full flow — register → create template → open designer → add a Text and a Rectangle element → drag the text element → edit its value in the property panel → save draft (created v2) → switch to the Preview tab → render a live preview (confirmed via canvas pixel dimensions and a follow-up screenshot that the actual server-rendered PDF text appeared) → switch to History tab → publish → confirmed the list page picks up the new "published" status.
+- **Found and fixed a real bug during that verification**: `usePublishTemplateVersion`/`useRestoreTemplateVersion` invalidated only the `['templates', templateId]` query-cache branch, not the sibling `['templates', page, limit, filters]` list-query branch (TanStack Query's prefix-matching invalidation doesn't reach across sibling keys) — so the Templates list page kept showing the pre-publish status for up to the 30s `staleTime`. Fixed by invalidating the broader `['templates']` key, then re-verified the fix with a second Playwright run.
+- Cleaned up afterward: killed both temporary dev servers, deleted the throwaway verification script, confirmed `git status` showed only the intended Designer UI files.
+- Full verification pass: `npm run typecheck` (all 3 workspaces), `npm run lint` (clean after one auto-fixed import-order issue), `npm run format:check` (clean after auto-formatting).
+
+### Files modified
+
+- `client/src/features/templates/api.ts`, `client/src/features/field-definitions/api.ts` (new)
+- `client/src/stores/designer.store.ts` (new)
+- `client/src/features/templates/designer/{Canvas,ElementBox,ElementPalette,PropertyPanel,PreviewPane,VersionHistoryPanel,page-sizes}.tsx|.ts` (new)
+- `client/src/lib/pdfjs.ts` (new)
+- `client/src/pages/TemplatesPage.tsx`, `TemplateDesignerPage.tsx` (new)
+- `client/src/app/router.tsx`, `client/src/components/layout/AppShell.tsx` (nav/routes)
+- `client/package.json`, `package-lock.json` (added `pdfjs-dist`)
+- `docs/IMPLEMENTATION_STATUS.md` (updated — Phase 4 now complete)
+
+### Architectural decisions
+
+- Canvas renders at a fixed 1 template-point = 1 CSS pixel (no zoom control in v1) — simplest mapping for drag/resize math, and real pixel-perfect fidelity is the engine's job via the Preview tab, not the canvas's.
+- New elements are constructed as minimal drafts then run through the shared `elementSchema.parse()` — guarantees every element the Designer creates is valid against the exact same schema the server enforces, rather than maintaining a parallel "what's valid" assumption client-side.
+- Asset references in the property panel are entered as literal asset ids (paste the id from the Assets page) rather than a visual asset picker — a deliberate scope cut, consistent with how the engine itself looks assets up by literal string key (see `server/src/modules/templates/asset-references.ts` from the prior session).
+- Table columns are edited as raw JSON in this pass, not a visual column builder — documented as a known simplification, not silently dropped.
+
+### Bugs fixed
+
+- TanStack Query cache invalidation gap on publish/restore not refreshing the templates list page's status column (see Work completed above for the root cause and fix).
+
+### New issues discovered
+
+- No project-level "run/verify this app" skill exists — flagged in `docs/IMPLEMENTATION_STATUS.md` Technical Debt as worth capturing via `/run-skill-generator` before the next UI-heavy phase.
+
+### Remaining work
+
+Phase 5 (Document Generation: BullMQ worker, documents API, data import). See `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task".
+
+### Recommended next steps
+
+Start with `bullmq` + the render worker + the documents API server-side, same sequencing rationale as Phase 4 (land the queue and API before any generation UI, so the UI has something real to integrate against).
+
+---
+
 ## Session — 2026-06-29 (Phase 4 API implementation)
 
 **Branch:** `main`

@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~48% complete** (3 of 7 roadmap phases fully shipped; Phase 4 about half done — its API half is complete, its Designer UI half has not been started). Phase weighting is uneven — Phase 5 (Document Generation + queue) is still one of the larger remaining phases, so phase-count percentage slightly overstates remaining effort.
+**~55% complete** (4 of 7 roadmap phases fully shipped). Phase weighting is uneven — Phase 5 (Document Generation + queue) is one of the two largest remaining phases, so phase-count percentage slightly overstates remaining effort.
 
 ---
 
 # Current Phase
 
-**Phase 4 — Templates API + Designer UI, in progress.** The Templates + Field Definitions API (server-side) is complete and tested. The Designer UI (client-side canvas/drag-drop/property panels) has not been started — this is what's left before Phase 4's exit criteria ("an admin can build, preview, and publish a real Invoice template through the UI with zero backend code changes") is met.
+**Between Phase 4 and Phase 5.** Phase 4 (Templates API + Designer UI) is complete, demoed end-to-end in a real browser, and its exit criteria is met: an admin can create a template, design it visually (drag/resize elements, edit properties), save drafts, render a live preview via the real PDF engine, and publish it — with zero backend code changes. Phase 5 (Document Generation) has not been started.
 
 ---
 
@@ -39,41 +39,33 @@ Commit `4eec34e` (2026-06-27). Headless `render(template, data, assets)` as Reso
 
 **Note on phase boundary:** Phase 2's "Exit Criteria" (full CRUD + audit trail for customers/assets/settings, visible in UI with RBAC) is functionally met server-side and in the client pages.
 
----
+### Phase 4 — Templates API + Designer UI ✅
 
-# Current Work
+Server-side (`server/src/modules/templates/`, `field-definitions/`): Template + TemplateVersion models, full CRUD, duplicate, export/import bundle, versions (save with optimistic-concurrency `STALE_VERSION` conflict detection, publish with broken-literal-asset-reference validation, restore/rollback, structural compare), and a fast-path preview wired directly to the Phase 3 engine. Field Definitions merges hardcoded system fields with org-scoped custom fields, with a delete-guard against fields referenced by published templates. 12 integration tests; full server suite 128/128 passing.
 
-**Phase 4 server-side is done; client-side has not been started.** Landed this session (commit pending):
+Client-side (`client/src/features/templates/`, `client/src/pages/TemplatesPage.tsx`, `TemplateDesignerPage.tsx`): a `TemplatesPage` (list/create/duplicate/archive/export/import), and a `TemplateDesignerPage` with three tabs — **Design** (canvas rendering header/footer/sections at 1pt=1px, pointer-event-based drag-to-move and corner-handle resize, a 14-type element palette, and a property panel with common fields plus type-specific controls for text/dynamicField/image/qrcode/barcode/rectangle/circle/table/checkbox/divider), **Preview** (sample-data JSON input → calls the real preview endpoint → renders the returned PDF via `pdfjs-dist` onto a `<canvas>`, with page navigation), and **History** (version list, publish, restore, a simple two-version compare). State lives in a zustand `designer.store.ts` (the draft `TemplateDocument`, selection, dirty flag) edited via small, targeted mutation actions rather than a generic deep-merge.
 
-- `server/src/modules/templates/` — Template + TemplateVersion Mongoose models, repository, service, controller, routes: CRUD, duplicate, export/import bundle, versions (list/save/get/publish/restore/compare), preview.
-- `server/src/modules/field-definitions/` — merges hardcoded `SYSTEM_FIELDS` (shared/constants) with org-scoped custom fields; create/update/delete, delete-guard when a field is referenced by any published template.
-- `POST /templates/:id/preview` calls the Phase 3 `engine/render.ts` directly (in-process, not queued, nothing persisted) — `server/src/modules/templates/asset-references.ts` resolves literal and token-based asset references into the engine's `AssetMap`.
-- Optimistic-concurrency version save (`baseVersionNumber` → 409 `STALE_VERSION` on a stale save) and publish-time broken-asset-reference validation (422 listing missing asset ids), both per PRD 10 §10.3.
-- Duplicate-element-id validation added to `templateDocumentSchema` itself (`shared/src/schemas/template/document.schema.ts`) via `superRefine`, so every caller (save, import, restore) gets the PRD 10 §10.3 check for free.
-- 12 new integration tests (`server/tests/integration/templates.test.ts`, `field-definitions.test.ts`) — full suite is 128/128 passing.
+**Verified live in a browser** (no project skill existed for this, so one was improvised — see Technical Debt): an ephemeral `mongodb-memory-server` + the real Express app + the real Vite dev server, driven with Playwright (installed to a scratch temp dir, not added to the repo). Confirmed: register → create template → add/drag/edit elements → save draft (v1→v2) → live preview renders actual PDF content → publish → version history shows both versions correctly.
 
-**Deliberate deviations from the PRD's literal schema, made while implementing (see also Technical Debt below):**
+**Bug found and fixed during that verification:** `usePublishTemplateVersion`/`useRestoreTemplateVersion` (`client/src/features/templates/api.ts`) only invalidated the `['templates', templateId]` TanStack Query cache branch, not the sibling `['templates', page, limit, filters]` list-query branch — so the Templates list page kept showing "draft" for up to `staleTime` (30s) after a publish. Fixed by invalidating the broader `['templates']` key, matching the convention already used by create/update/archive/duplicate.
+
+**Deliberate deviations from the PRD's literal schema, made while implementing:**
 
 - `templates.status` enum (`draft/published/archived`) subsumes the PRD's separate `isArchived` boolean (PRD 03 §3.2.5) — kept one field instead of two redundant ones.
 - `template_versions.organizationId` was added even though the PRD's field table for that collection omits it — added so every version query can be tenant-scoped directly, consistent with the multi-tenancy rule the PRD states elsewhere (03 §3.3).
 - `documentType` is validated as a free-form string, not a fixed enum, to preserve the "zero-code document onboarding" goal (PRD 01 §1.2) — a hard enum would mean a new document type needs a code change.
 - Field Definitions reuses the `templates:read`/`templates:write` permissions rather than a new RBAC resource, since PRD 07 §7.1's permission table has no dedicated `field-definitions` resource and the API sits right under Templates in PRD 05.
+- The Designer's property panel gives full type-specific controls to the most common ~10 element types; `table` columns are edited as raw JSON (no visual column builder yet) — a scoped, documented simplification rather than building a bespoke column editor in this pass.
 
-**Not yet done in Phase 4:**
+---
 
-- [ ] `client/src/features/templates/designer/` — canvas, drag/position/resize, element palette, property panel per element type
-- [ ] Live preview pane (pdf.js) wired to the preview endpoint, debounced per [PRD 06 §6.5](PRD/06-flows.md)
-- [ ] `client/src/pages/TemplatesPage.tsx` (list/CRUD chrome) + designer route
+# Current Work
+
+Nothing is currently mid-implementation. Phase 4 closed out cleanly (server-side + client-side, fully verified live) with no partial files or failing tests. The codebase is at a clean phase boundary.
 
 ---
 
 # Remaining Tasks
-
-## Phase 4 — Designer UI (server-side API is done — see Current Work above)
-
-- [ ] `client/src/features/templates/designer/` — canvas, drag/position/resize, element palette, property panel per element type
-- [ ] Live preview pane (pdf.js) wired to the preview endpoint, debounced per [PRD 06 §6.5](PRD/06-flows.md)
-- [ ] `client/src/pages/TemplatesPage.tsx` (list/CRUD chrome) + designer route
 
 ## Phase 5 — Document Generation (not started)
 
@@ -112,6 +104,8 @@ Commit `4eec34e` (2026-06-27). Headless `render(template, data, assets)` as Reso
 - No Docker Compose / Dockerfiles at all yet — local dev currently depends on cloud-hosted MongoDB Atlas + Upstash Redis per `README.md`, which works for solo dev but diverges from the PRD's documented Docker-first NFR story ([PRD 09](PRD/09-nfr-deployment-cicd.md)). Likely fine to defer to Phase 7 as planned, but flagging so it isn't forgotten.
 - No CI pipeline — lint/typecheck/test only run locally (via Husky pre-commit/pre-push hooks), nothing enforced on push/PR yet.
 - Rate limiting middleware (`server/src/middleware/rate-limit.ts`) exists from Phase 1 but should be revisited once Redis is actually load-bearing (Phase 5) to confirm it's using a sliding-window Redis store rather than in-memory, per [PRD 05 §5.14](PRD/05-api-design.md).
+- No project-level "run/verify this app" skill exists yet — verifying the Designer UI required improvising an ephemeral-Mongo + Playwright setup from scratch in a scratch temp directory. Worth capturing as a real project skill (e.g. via `/run-skill-generator`) before the next UI-heavy phase, so it doesn't need re-deriving.
+- The Designer's table-element column editor is raw JSON, not a visual column builder — fine for an admin comfortable with the schema, but worth a real UI before Phase 4 is considered "polished" (tracked here, not blocking Phase 5).
 
 ---
 
@@ -123,10 +117,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Build the Designer UI client-side** (`client/src/features/templates/designer/`) against the now-complete Templates API: canvas + element palette + drag/position/resize + property panel per element type, wired to `POST /templates/:id/preview` (debounced, per PRD 06 §6.5) for live pdf.js preview, plus the surrounding `TemplatesPage.tsx` list/CRUD chrome and version-history/compare/restore UI. This is the only piece left before Phase 4's exit criteria is met.
+**Start Phase 5: Document Generation.** Install `bullmq` and stand up `server/src/workers/` with a render worker consuming Redis-backed jobs; add the `server/src/modules/documents/` module (create with the sync-fast-path/async-queue split per [PRD 06 §6.2](PRD/06-flows.md), regenerate against the pinned `templateVersionId`, signed-URL PDF retrieval); then the data-import path (`csv-parse`/`exceljs`, none installed yet) with column mapping + bulk-generate + batch polling. Land the API + worker + tests first, same sequencing rationale as Phase 4: a queue and a documents API are prerequisites for any generation UI to be demoable against something real.
 
 ---
 
 # Last Updated
 
-2026-06-29 — added the Phase 4 Templates + Field Definitions API (server-side); see `docs/SESSION_LOG.md` for this session's entry.
+2026-06-29 — completed Phase 4 (Templates + Field Definitions API, and the Designer UI client-side), verified live in a browser; see `docs/SESSION_LOG.md` for this session's entry.
