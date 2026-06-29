@@ -4,6 +4,40 @@
 
 ---
 
+## Session — 2026-06-30 (Deployment — pushed to GitHub, Render blueprint for the server)
+
+**Branch:** `main`
+**Commit at session start:** `fdc7ac4` — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+The user asked to push the repo to GitHub and deploy the client to GitHub Pages and the server to Render. Confirmed I had neither GitHub CLI nor Render account access — asked the user to create the GitHub repo themselves and decide how deployment execution should work. They created `https://github.com/Govindrajewar/docplatform`, picked the repo name "docplatform" (matching the UI's own displayed app name) when asked for a suggestion, and chose: I prepare deployment configs, they click-deploy themselves on Render's dashboard (so I never see real secrets); include a background worker service (without it, bulk-generate and all email silently never complete); default GitHub Pages project-page URL (`https://Govindrajewar.github.io/docplatform/`), not a custom domain.
+
+Pushing itself hit a snag: `git push` hung because Git Credential Manager needs an interactive browser popup that can't complete from this automated shell. The user ran the push themselves in their own terminal instead, which worked.
+
+This entry covers the Render half (server). The GitHub Pages half (client) is still to come.
+
+### Work completed
+
+- `render.yaml` (new, repo root) — a Render Blueprint with two services: `docplatform-api` (web) and `docplatform-worker` (background worker), both built via `npm ci && npm run build:shared && npm run build --workspace=server` (mirroring the CI workflow's already-established `build:shared`-before-server ordering) with different start commands (`node server/dist/server.js` vs `node server/dist/workers/index.js`). `MONGODB_URI`/`REDIS_URL` are `sync: false` so the user pastes real connection strings directly into Render's dashboard; JWT secrets use Render's `generateValue: true` (auto-generated, independently per service — harmless since the worker never verifies tokens, it just needs a schema-valid value to boot).
+- **Real bug found and fixed, not cosmetic**: `auth.controller.ts`'s refresh-token cookie was hardcoded `sameSite: 'strict'`. Once client and API live on different domains (github.io vs onrender.com), a `strict` cookie is never sent back on a cross-site request — the refresh flow would have silently failed the first time an access token expired (15 min), forcing an unexplained re-login. Fixed by switching to `'none'` in production only (`'strict'` still applies in dev/test, where the Vite proxy keeps everything same-site). Flagged the resulting trade-off clearly: this removes the `sameSite`-based half of PRD 08's CSRF mitigation for `/auth/refresh`/`/auth/logout` in production, since the other planned half (a CSRF double-submit token) is still unbuilt Phase 7 work. Verified via the existing `auth.test.ts` suite — still 8/8 passing, since `NODE_ENV=test` keeps the old `'strict'` behavior.
+- Documented, not yet fixed: `STORAGE_DRIVER=local` means uploaded assets/generated PDFs won't survive a Render deploy or restart (ephemeral filesystem). No code change for this — just disclosed clearly in `render.yaml`'s comments and `docs/IMPLEMENTATION_STATUS.md`, since fixing it for real means either a paid Render Disk or finishing the S3 driver (still part of the paused Docker/infra Phase 7 slice).
+- Validated `render.yaml`'s YAML syntax via a one-off `js-yaml` parse check, and confirmed both build outputs (`server/dist/server.js`, `server/dist/workers/index.js`) already exist from the build run during the CI-workflow verification pass.
+
+### Bugs fixed
+
+- The `sameSite: 'strict'` cross-origin cookie issue above — a real bug that would have surfaced as "users get logged out every 15 minutes for no visible reason" the moment this got deployed, not something cosmetic.
+
+### New issues discovered
+
+- None beyond what's already disclosed above (ephemeral storage on Render, reduced CSRF protection in production until the double-submit token exists).
+
+### Remaining work
+
+GitHub Pages client deploy: a GitHub Actions workflow to build the client (with `vite.config.ts`'s `base` set to `/docplatform/` and the deployed Render API's URL baked in via a `VITE_API_BASE_URL`-style build-time env var) and publish it to Pages. Then end-to-end smoke test: register → login → survive a refresh → generate a document, against the real deployed stack.
+
+---
+
 ## Session — 2026-06-30 (Phase 7 — Docker/infra slice paused, no code changes)
 
 **Branch:** `main`

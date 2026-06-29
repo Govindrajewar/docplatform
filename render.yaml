@@ -1,0 +1,75 @@
+services:
+  # API — handles HTTP traffic. Sync-path document generation and all CRUD work even if the
+  # worker below isn't running; bulk/async generation and outgoing email require the worker.
+  - type: web
+    name: docplatform-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build:shared && npm run build --workspace=server
+    startCommand: node server/dist/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      # Paste your real connection strings in the Render dashboard — never committed here.
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN_DAYS
+        value: '30'
+      # Must be the GitHub Pages *origin* (scheme+host only, no path) once the client is deployed.
+      - key: CORS_ORIGIN
+        value: https://Govindrajewar.github.io
+      # local storage is ephemeral on Render's filesystem — see docs/IMPLEMENTATION_STATUS.md's
+      # Phase 7 notes. Uploaded assets/generated PDFs will not survive a deploy or restart until
+      # either a persistent Disk is attached (paid plans) or the real S3 driver is implemented.
+      - key: STORAGE_DRIVER
+        value: local
+      - key: STORAGE_LOCAL_PATH
+        value: ./storage/uploads
+      - key: LOG_LEVEL
+        value: info
+
+  # Worker — drains the render and email BullMQ queues. Same build as the API, different entry
+  # point, no public URL. Without this service, bulk-generate batches and all outgoing email
+  # (invites, password resets, notifications) stay queued forever.
+  - type: worker
+    name: docplatform-worker
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build:shared && npm run build --workspace=server
+    startCommand: node server/dist/workers/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      # Unused by the worker functionally (it never verifies a token) but required at boot —
+      # config/env.ts's schema has no .optional() for these. Independent generated values are fine.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN_DAYS
+        value: '30'
+      - key: CORS_ORIGIN
+        value: https://Govindrajewar.github.io
+      - key: STORAGE_DRIVER
+        value: local
+      - key: STORAGE_LOCAL_PATH
+        value: ./storage/uploads
+      - key: LOG_LEVEL
+        value: info

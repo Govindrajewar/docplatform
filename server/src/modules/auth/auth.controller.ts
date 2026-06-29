@@ -13,7 +13,11 @@ function setRefreshCookie(res: Response, token: string): void {
   res.cookie(REFRESH_COOKIE_NAME, token, {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    // 'strict' in dev, where the Vite proxy makes the client+API same-site. In production the
+    // client (GitHub Pages) and API (Render) are on different domains, so the cookie must be
+    // 'none' (requires secure, already true above) or the browser never sends it back on
+    // refresh — see PRD 08 §8.1's CSRF mitigation note for the trade-off this introduces.
+    sameSite: env.NODE_ENV === 'production' ? 'none' : 'strict',
     maxAge: env.JWT_REFRESH_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000,
     path: '/api/v1/auth',
   });

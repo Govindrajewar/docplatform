@@ -197,6 +197,18 @@ Nothing is currently mid-implementation. Phase 6 is fully done. Phase 7 has its 
 
 ---
 
+# Deployment
+
+The repo is now pushed to `https://github.com/Govindrajewar/docplatform` and being deployed: client to GitHub Pages, server (API + worker) to Render via `render.yaml` at the repo root.
+
+- **`render.yaml`** (new) defines two services from one blueprint: `docplatform-api` (web, `node server/dist/server.js`, health-checked at `/health`) and `docplatform-worker` (background worker, `node server/dist/workers/index.js`, drains the render+email BullMQ queues). Both share the same build command (`npm ci && npm run build:shared && npm run build --workspace=server`) — the same `build:shared`-before-server ordering the CI workflow already established is necessary. `MONGODB_URI`/`REDIS_URL` are `sync: false` (set manually in Render's dashboard, never committed); `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` use Render's `generateValue: true` (auto-generated per service — the worker needs _some_ valid value to pass `env.ts`'s zod schema at boot even though it never verifies tokens, so independently-generated values are fine).
+- **Real, necessary code fix**: `server/src/modules/auth/auth.controller.ts`'s refresh-token cookie was `sameSite: 'strict'` unconditionally. With the client (GitHub Pages) and API (Render) on different domains, a `strict` cookie is never sent back cross-site by the browser — silently breaking the refresh flow (`AuthBootstrap`'s silent refresh on load, and the 401-retry logic in `lib/axios.ts`) the first time the access token expired, forcing a re-login every 15 minutes with no visible error. Fixed by making it `sameSite: env.NODE_ENV === 'production' ? 'none' : 'strict'` (`'none'` requires `secure: true`, already conditioned on production). **Trade-off worth knowing**: this drops the `sameSite`-based CSRF protection PRD 08 §8.1 describes for the cookie-authenticated `/auth/refresh`/`/auth/logout` routes in production specifically, since the planned double-submit CSRF token (the other half of that mitigation) is part of the still-untouched security-hardening Phase 7 slice. Until that's built, those two routes have reduced CSRF protection in production. Verified via the existing `auth.test.ts` suite (`NODE_ENV=test` keeps `sameSite: 'strict'` there, so this didn't change test behavior) — 8/8 still passing.
+- **Known limitation, disclosed in `render.yaml`'s comments**: `STORAGE_DRIVER=local` writes to Render's ephemeral filesystem — uploaded assets and generated PDFs will not survive a deploy or restart. No fix shipped yet; either attach a Render persistent Disk (paid plans) or finish the still-unstarted S3 storage driver (Phase 7 Docker/infra slice).
+- `CORS_ORIGIN` is set to `https://Govindrajewar.github.io` (the GitHub Pages _origin_ — scheme+host only, no `/docplatform/` path, since `Origin` headers never include a path).
+- GitHub Pages client deploy (Vite `base` path, a GitHub Actions workflow to build+publish to Pages, wiring the deployed API's URL into the client build) has not been done yet — render.yaml/the cookie fix were step one; the client deploy is the next step.
+
+---
+
 # Blockers
 
 **Docker/infra Phase 7 slice is blocked**: no Docker engine is installed on this dev machine, so Dockerfiles/docker-compose can't be written-and-verified together. Not a code blocker — everything else in the codebase is clean, fully tested, with no partial work in progress. Install Docker before resuming that specific slice (see Technical Debt).
