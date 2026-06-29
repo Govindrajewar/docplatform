@@ -6,6 +6,7 @@ import type {
   DocumentStatus,
   PaginationMeta,
 } from '@platform/shared';
+import { toast } from 'sonner';
 
 import { api } from '@/lib/axios';
 
@@ -76,7 +77,10 @@ export function useCreateDocument() {
   return useMutation({
     mutationFn: (input: CreateDocumentInput) =>
       unwrap<DocumentListItem>(api.post('/documents', input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+    onSuccess: (doc) => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      toast.success(doc.status === 'generated' ? 'Document generated' : 'Document queued');
+    },
   });
 }
 
@@ -84,7 +88,10 @@ export function useRegenerateDocument() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<DocumentListItem>(api.post(`/documents/${id}/regenerate`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      toast.success('Regeneration started');
+    },
   });
 }
 
@@ -92,7 +99,10 @@ export function useDeleteDocument() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<{ message: string }>(api.delete(`/documents/${id}`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      toast.success('Document deleted');
+    },
   });
 }
 
@@ -125,7 +135,12 @@ export function useBulkGenerate() {
   return useMutation({
     mutationFn: (input: BulkGenerateInput) =>
       unwrap<BulkGenerateResult>(api.post('/documents/bulk-generate', input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      toast.success(
+        `Bulk generation started: ${result.accepted} accepted, ${result.rejected.length} rejected`,
+      );
+    },
   });
 }
 

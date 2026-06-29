@@ -12,6 +12,7 @@ import {
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { GlobalSearch } from '@/components/common/GlobalSearch';
+import { NotificationBell } from '@/components/common/NotificationBell';
 import { cn } from '@/lib/cn';
 import { useLogout } from '@/features/auth/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -66,8 +67,9 @@ export function AppShell() {
         </div>
       </aside>
       <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center justify-end border-b border-border bg-card px-8">
+        <header className="flex h-16 items-center justify-end gap-3 border-b border-border bg-card px-8">
           <GlobalSearch />
+          <NotificationBell />
         </header>
         <main className="flex-1 overflow-y-auto p-8">
           <Outlet />

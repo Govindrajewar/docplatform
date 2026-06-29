@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ApiResponse, AssetType, PaginationMeta } from '@platform/shared';
+import { toast } from 'sonner';
 
 import { api } from '@/lib/axios';
 
@@ -44,7 +45,10 @@ export function useUploadAsset() {
         api.post('/assets', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
       );
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      toast.success('Asset uploaded');
+    },
   });
 }
 
@@ -52,7 +56,10 @@ export function useDeleteAsset() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<{ message: string }>(api.delete(`/assets/${id}`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      toast.success('Asset deleted');
+    },
   });
 }
 

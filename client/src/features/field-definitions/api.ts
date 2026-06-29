@@ -4,6 +4,7 @@ import type {
   CreateFieldDefinitionInput,
   UpdateFieldDefinitionInput,
 } from '@platform/shared';
+import { toast } from 'sonner';
 
 import { api } from '@/lib/axios';
 
@@ -35,7 +36,10 @@ export function useCreateFieldDefinition() {
   return useMutation({
     mutationFn: (input: CreateFieldDefinitionInput) =>
       unwrap<FieldDefinitionItem>(api.post('/field-definitions', input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field-definitions'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['field-definitions'] });
+      toast.success('Field created');
+    },
   });
 }
 
@@ -44,7 +48,10 @@ export function useUpdateFieldDefinition() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateFieldDefinitionInput }) =>
       unwrap<FieldDefinitionItem>(api.patch(`/field-definitions/${id}`, input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field-definitions'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['field-definitions'] });
+      toast.success('Field updated');
+    },
   });
 }
 
@@ -52,6 +59,9 @@ export function useDeleteFieldDefinition() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<{ message: string }>(api.delete(`/field-definitions/${id}`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field-definitions'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['field-definitions'] });
+      toast.success('Field deleted');
+    },
   });
 }

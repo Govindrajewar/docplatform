@@ -4,6 +4,39 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 6b — Notifications: toast, in-app, email worker)
+
+**Branch:** `main`
+**Commit at session start:** `bb12d6a` (feat: implement Phase 6a dashboard real data) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; `docs/IMPLEMENTATION_STATUS.md` pointed at Phase 6b (Notifications). Since the PRD lists three distinct channels (toast, in-app, email worker) each substantial enough to be its own pass, I asked the user to scope this round — they chose **all three together** rather than splitting further, so this is a larger single pass than the session's usual increment size.
+
+### Work completed
+
+- **Email infrastructure**: installed `nodemailer` + `@types/nodemailer`; added optional `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM` env vars; `server/src/config/mail.ts` (`sendMail`) logs the email instead of sending when `SMTP_HOST` is unset — the same dev-mode delivery channel the pre-existing invite/forgot-password TODOs already used, now made real. A new BullMQ `email` queue + worker (`server/src/queues/email.queue.ts`, `server/src/workers/email.worker.ts`) mirrors the render queue/worker pattern exactly; `buildRenderQueueConnection` (`queues/redis-connection.ts`) was renamed to `buildQueueConnection` since it's shared by both queues now, not render-specific.
+- **In-app notifications**: new `Notification` model + `server/src/modules/notifications/` (repository, service, controller, routes) — `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/:id/read`, `POST /notifications/read-all`, scoped to the authenticated user (no RBAC resource needed, every role manages its own). `notificationsService.notify(...)` is the single call site every trigger uses: writes the in-app row and enqueues the email job together.
+- **Triggers**: `render-document.ts` now notifies the document's `createdBy` on success (`document.generated`) and failure (`document.failed`) for non-batch documents. A new `notify-batch-completion.ts` notifies the batch's `createdBy` **exactly once** when a bulk-generate batch finishes — a new `GenerationBatch.notifiedAt` field plus an atomic `findOneAndUpdate` claim (`claimCompletionNotification`) guards against the last few rows' worker jobs racing to fire it twice; also called right after batch creation for the edge case where every row was rejected at validation time before any render job was ever enqueued. The two pre-existing `// Email worker lands in Phase 6` placeholders (`users.service.ts` invite, `auth.service.ts` forgot-password) now call `enqueueEmailJob` with a real `${CORS_ORIGIN}/reset-password?token=...` link instead of just logging.
+- **Client — in-app**: `client/src/features/notifications/api.ts` + a new `NotificationBell` component (unread badge, dropdown list, click-to-mark-read, "mark all read") wired into `AppShell`'s header.
+- **Client — toast**: installed `sonner`; mounted `<Toaster/>` in `App.tsx`; added a `MutationCache.onError` default to `query-client.ts` so every mutation across the app surfaces its failure as a toast from one place, without removing any page's existing inline error text. Added `toast.success(...)` to the previously-silent, highest-value mutations across customers, assets, documents (including a bulk-generate accepted/rejected summary), templates, users, settings, and field definitions.
+- 8 new integration tests (`notifications.test.ts`): generated/failed document notifications with correct recipient/email; a 3-row batch produces exactly one completion notification and exactly one completion email; mark-read/mark-all-read/unread-count; per-user isolation within an org; unauthenticated rejection; invite and forgot-password email content. Added `vi.mock('../../src/queues/email.queue', ...)` to 4 existing test files (`documents.test.ts`, `documents-import.test.ts`, `dashboard.test.ts`, `auth.test.ts`) for the same reason `render.queue` was already mocked in some of them — without it, the real code paths they exercise would construct a real BullMQ `Queue` and attempt a real Redis connection (the user's actual Redis service, not a mock). Full server suite **153/153 passing**.
+- **Live-verified in a browser**, this time running both BullMQ workers for real (not mocked): an ephemeral `mongodb-memory-server` + a local `redis-server.exe` on a scratch port + the real Express app + the render **and** email workers + the real Vite dev server, driven with Playwright. Confirmed: creating a customer shows a "Customer created" toast; generating a document populates the notification bell with the right unread badge/message; clicking it marks it read and clears the badge; inspecting the scratch Redis queue directly confirmed the email jobs actually transitioned through the real worker (`added → waiting → active → completed`), not just the mocked test path.
+
+### Bugs fixed
+
+- None in the new code — typecheck/tests passed on first full run for both the server notification triggers and the client toast/bell wiring.
+
+### New issues discovered
+
+- **Pre-existing, unrelated to this phase**: `CustomersPage`'s optional `email` field rejects an empty string before the form even submits. `createCustomerSchema`'s `email: z.string().email().optional()` only treats `undefined` as "absent," but React Hook Form's uncontrolled `<input>` defaults an untouched field to `''`, which fails `.email()`. Found while live-verifying the toast flow (had to fill in an email to get past it). Flagged in `docs/IMPLEMENTATION_STATUS.md` Known Issues #6, not fixed — out of scope for this phase.
+
+### Remaining work
+
+Phase 6b is fully done. Phase 6c (Polish — dark mode, skeleton loaders, empty-state polish, Framer Motion animations, full Swagger examples) is the last item in Phase 6, then Phase 7 (Production Hardening) is the only roadmap phase left — see `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task".
+
+---
+
 ## Session — 2026-06-29 (Phase 6a — Dashboard real data)
 
 **Branch:** `main`

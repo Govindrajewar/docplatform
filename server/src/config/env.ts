@@ -19,6 +19,13 @@ const envSchema = z.object({
 
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
 
+  // SMTP — optional. Unset in dev: outgoing email is logged instead of sent (see config/mail.ts).
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default('"DocPlatform" <no-reply@docplatform.local>'),
+
   // Local-disk asset storage for dev (see PRD 09 — cloud object storage is a prod-only swap of this adapter)
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_PATH: z.string().default('./storage/uploads'),

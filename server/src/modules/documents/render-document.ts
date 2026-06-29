@@ -6,13 +6,50 @@ import type { TemplateDocument as TemplateLayout } from '@platform/shared';
 
 import { logger } from '../../config/logger';
 import { render } from '../../engine/render';
-import { DocumentModel } from '../../models/document.model';
+import { DocumentModel, type DocumentDocument } from '../../models/document.model';
 import { GeneratedPdfModel } from '../../models/generated-pdf.model';
+import { TemplateModel } from '../../models/template.model';
 import { TemplateVersionModel } from '../../models/template-version.model';
 import { storageDriver } from '../../storage';
+import { notificationsService } from '../notifications/notifications.service';
 import { buildAssetMap, collectPreviewAssetReferences } from '../templates/asset-references';
 
 import { generationBatchesRepository } from './generation-batches.repository';
+import { notifyBatchCompletionIfDone } from './notify-batch-completion';
+
+async function notifySingleDocumentOutcome(
+  doc: DocumentDocument,
+  outcome: 'generated' | 'failed',
+  failureReason?: string,
+): Promise<void> {
+  const template = await TemplateModel.findById(doc.templateId).lean();
+  const templateName = template?.name ?? 'a template';
+
+  if (outcome === 'generated') {
+    await notificationsService.notify({
+      organizationId: doc.organizationId.toString(),
+      userId: doc.createdBy.toString(),
+      type: 'document.generated',
+      title: 'Document generated',
+      message: `Your document from "${templateName}" was generated successfully.`,
+      entityType: 'document',
+      entityId: doc._id.toString(),
+      emailSubject: 'Your document is ready',
+    });
+    return;
+  }
+
+  await notificationsService.notify({
+    organizationId: doc.organizationId.toString(),
+    userId: doc.createdBy.toString(),
+    type: 'document.failed',
+    title: 'Document generation failed',
+    message: `Your document from "${templateName}" failed to generate: ${failureReason ?? 'unknown error'}.`,
+    entityType: 'document',
+    entityId: doc._id.toString(),
+    emailSubject: 'Your document failed to generate',
+  });
+}
 
 /**
  * The single rendering path shared by the synchronous fast-path (awaited inline in the create
@@ -74,6 +111,9 @@ export async function renderDocument(documentId: string): Promise<void> {
 
     if (doc.batchId) {
       await generationBatchesRepository.recordOutcome(doc.batchId.toString(), { success: true });
+      await notifyBatchCompletionIfDone(doc.batchId.toString());
+    } else {
+      await notifySingleDocumentOutcome(doc, 'generated');
     }
   } catch (err) {
     logger.error('renderDocument failed', { documentId, err });
@@ -88,6 +128,9 @@ export async function renderDocument(documentId: string): Promise<void> {
         row: doc.batchRowIndex ?? -1,
         reason: failureReason,
       });
+      await notifyBatchCompletionIfDone(doc.batchId.toString());
+    } else {
+      await notifySingleDocumentOutcome(doc, 'failed', failureReason);
     }
   }
 }

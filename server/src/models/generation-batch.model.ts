@@ -22,6 +22,10 @@ const generationBatchSchema = new Schema(
     failedCount: { type: Number, default: 0 },
     failures: { type: [batchFailureSchema], default: [] },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    // Set the first (and only) time the batch-completion notification is sent — an atomic
+    // findOneAndUpdate claim (see notifications/notify.ts) guards against firing it twice when
+    // multiple worker jobs finish the batch's last few rows around the same time.
+    notifiedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

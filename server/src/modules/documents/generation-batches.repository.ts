@@ -24,17 +24,37 @@ export const generationBatchesRepository = {
   async recordOutcome(
     batchId: string,
     outcome: { success: true } | { success: false; row: number; reason: string },
-  ): Promise<void> {
+  ): Promise<GenerationBatchDocument | null> {
     if (outcome.success) {
-      await GenerationBatchModel.updateOne({ _id: batchId }, { $inc: { completedCount: 1 } });
-      return;
+      return GenerationBatchModel.findOneAndUpdate(
+        { _id: batchId },
+        { $inc: { completedCount: 1 } },
+        { new: true },
+      ).lean();
     }
-    await GenerationBatchModel.updateOne(
+    return GenerationBatchModel.findOneAndUpdate(
       { _id: batchId },
       {
         $inc: { failedCount: 1 },
         $push: { failures: { row: outcome.row, reason: outcome.reason } },
       },
-    );
+      { new: true },
+    ).lean();
+  },
+
+  /** Atomically claims the right to send the batch-completion notification — the `notifiedAt:
+   * null` filter means this only succeeds once, even if the batch's last few rows finish on
+   * different worker ticks around the same moment. Returns the batch only when this call is the
+   * one that should notify; returns `null` otherwise (already notified, or not yet complete). */
+  async claimCompletionNotification(batchId: string): Promise<GenerationBatchDocument | null> {
+    return GenerationBatchModel.findOneAndUpdate(
+      {
+        _id: batchId,
+        notifiedAt: null,
+        $expr: { $gte: [{ $add: ['$completedCount', '$failedCount'] }, '$totalCount'] },
+      },
+      { notifiedAt: new Date() },
+      { new: true },
+    ).lean();
   },
 };

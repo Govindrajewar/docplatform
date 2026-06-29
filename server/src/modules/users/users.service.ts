@@ -1,6 +1,7 @@
 import type { CreateUserInput, PaginationMeta, UpdateUserInput } from '@platform/shared';
 
-import { logger } from '../../config/logger';
+import { env } from '../../config/env';
+import { enqueueEmailJob } from '../../queues/email.queue';
 import { AppError } from '../../utils/app-error';
 import type { AuthenticatedUser } from '../../types/express';
 import { generatePasswordResetToken } from '../auth/tokens';
@@ -73,10 +74,11 @@ export const usersService = {
       },
     );
 
-    // Email worker lands in Phase 6 (PRD 11 §11.2) — log the invite link as the dev-mode delivery channel.
-    logger.info('User invited — set-password link generated', {
-      email: user.email,
-      resetToken: token,
+    const setPasswordUrl = `${env.CORS_ORIGIN}/reset-password?token=${token}`;
+    await enqueueEmailJob({
+      to: user.email,
+      subject: "You've been invited to DocPlatform",
+      text: `You've been invited to join an organization on DocPlatform. Set your password here: ${setPasswordUrl}`,
     });
 
     return toPublicUser({ ...user, status: 'invited' });

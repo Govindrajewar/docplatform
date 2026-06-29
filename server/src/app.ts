@@ -17,6 +17,7 @@ import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { documentsRouter } from './modules/documents/documents.routes';
 import { fieldDefinitionsRouter } from './modules/field-definitions/field-definitions.routes';
 import { healthRouter } from './modules/health/health.routes';
+import { notificationsRouter } from './modules/notifications/notifications.routes';
 import { organizationsRouter } from './modules/organizations/organizations.routes';
 import { searchRouter } from './modules/search/search.routes';
 import { settingsRouter } from './modules/settings/settings.routes';
@@ -48,6 +49,7 @@ export function createApp(): Express {
   app.use('/api/v1/field-definitions', fieldDefinitionsRouter);
   app.use('/api/v1/documents', documentsRouter);
   app.use('/api/v1/dashboard', dashboardRouter);
+  app.use('/api/v1/notifications', notificationsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

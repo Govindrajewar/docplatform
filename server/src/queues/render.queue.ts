@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
 
-import { buildRenderQueueConnection } from './redis-connection';
+import { buildQueueConnection } from './redis-connection';
 
 export interface RenderJobData {
   documentId: string;
@@ -15,7 +15,7 @@ let queue: Queue<RenderJobData> | null = null;
  */
 function getRenderQueue(): Queue<RenderJobData> {
   queue ??= new Queue<RenderJobData>('render', {
-    connection: buildRenderQueueConnection(),
+    connection: buildQueueConnection(),
   });
   return queue;
 }

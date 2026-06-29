@@ -19,6 +19,7 @@ import { isComplexPayload } from './complexity';
 import { documentsRepository } from './documents.repository';
 import { generationBatchesRepository } from './generation-batches.repository';
 import { parseImportFile, suggestColumnMapping } from './import-parsing';
+import { notifyBatchCompletionIfDone } from './notify-batch-completion';
 import { renderDocument } from './render-document';
 import { validateAndCoerceRow } from './row-validation';
 
@@ -183,6 +184,12 @@ export const documentsService = {
         batchRowIndex: acceptedRow.row,
       });
       await enqueueRenderJob(created._id.toString());
+    }
+
+    // Edge case: every row was rejected at validation time, so no render job was ever enqueued
+    // to later trigger the completion check — the batch is already "done" right now.
+    if (accepted.length === 0) {
+      await notifyBatchCompletionIfDone(batch._id.toString());
     }
 
     return {

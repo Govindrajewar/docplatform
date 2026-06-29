@@ -1,10 +1,14 @@
 import { ROLE_PERMISSIONS, SYSTEM_ROLES } from '@platform/shared';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../../src/app';
 import { connectDatabase, disconnectDatabase } from '../../src/config/db';
 import { RoleModel } from '../../src/models/role.model';
+
+vi.mock('../../src/queues/email.queue', () => ({
+  enqueueEmailJob: vi.fn(async () => {}),
+}));
 
 const app = createApp();
 

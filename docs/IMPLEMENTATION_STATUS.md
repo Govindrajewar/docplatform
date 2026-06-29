@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~75% complete** (5 of 7 roadmap phases fully shipped, Phase 6 in progress). Phase 5 (Document Generation) is fully done, server and client. Phase 6's first slice — real Dashboard data — is now done; Notifications and Polish remain.
+**~80% complete** (5 of 7 roadmap phases fully shipped, Phase 6 in progress). Phase 5 (Document Generation) is fully done, server and client. Phase 6a (Dashboard) and 6b (Notifications) are done; Polish (6c) remains.
 
 ---
 
 # Current Phase
 
-**Phase 6 — Dashboard, Notifications, Polish (in progress).** Phase 6a (Dashboard real data) is complete: KPI cards, a documents-over-time chart, recent documents, storage usage, and a permission-gated recent-activity feed, server and client, verified live in a browser. Phase 6b (notifications — email worker, in-app/toast) and Phase 6c (polish — dark mode, skeleton loaders, animations, full Swagger) have not been started.
+**Phase 6 — Dashboard, Notifications, Polish (in progress).** Phase 6a (Dashboard real data) is complete: KPI cards, a documents-over-time chart, recent documents, storage usage, and a permission-gated recent-activity feed, server and client, verified live in a browser. Phase 6b (Notifications — toast, in-app, email worker) is now also complete, server and client, verified live in a browser with a real BullMQ email worker actually consuming jobs. Phase 6c (polish — dark mode, skeleton loaders, animations, full Swagger) has not been started.
 
 ---
 
@@ -93,11 +93,23 @@ Client-side (`client/src/features/dashboard/api.ts`, `client/src/pages/Dashboard
 
 **Verified live in a browser**: an ephemeral `mongodb-memory-server` + a local `redis-server.exe` on a scratch port (not the project's real Redis) + the real Express app + the real Vite dev server, driven with Playwright. Confirmed: register → create customers/template/documents via direct API calls → Dashboard renders correct KPI counts, a non-empty bar chart, the recent-documents list, and (as admin, who holds `logs:read`) a populated recent-activity feed with real audit-log actions.
 
+### Phase 6b — Notifications ✅ (completes the notification triad: toast, in-app, email)
+
+Server-side: a new `server/src/config/mail.ts` (`nodemailer`, SMTP optional — unset `SMTP_HOST` in dev logs the email instead of sending, the same "dev-mode delivery channel" the pre-existing invite/forgot-password TODOs already used, now made real) plus a BullMQ `email` queue/worker (`server/src/queues/email.queue.ts`, `server/src/workers/email.worker.ts`) mirroring the render queue's pattern exactly — `buildRenderQueueConnection` was renamed to `buildQueueConnection` since it's no longer render-specific. A new `server/src/modules/notifications/` module (`Notification` model, repository, service, controller, `GET/POST /notifications*`) backs in-app notifications: every authenticated user gets their own list (`GET /notifications`), unread count, mark-one-read, mark-all-read — scoped by `userId` within the org, no RBAC resource needed since every role manages its own notifications. A single `notificationsService.notify(...)` call site writes the in-app row and enqueues the email job together, so no trigger has to remember to do both.
+
+Three trigger points wired into existing flows: `render-document.ts` now notifies the document's `createdBy` on both success (`document.generated`) and failure (`document.failed`) for non-batch documents; a new `notify-batch-completion.ts` helper notifies the batch's `createdBy` exactly once when a bulk-generate batch finishes (an atomic `findOneAndUpdate` claim on a new `GenerationBatch.notifiedAt` field guards against the last few rows' worker jobs racing to fire it twice — also called once right after batch creation, for the edge case where every row was rejected at validation time before any render job was ever enqueued). The two pre-existing `// Email worker lands in Phase 6` placeholders (`users.service.ts`'s invite flow, `auth.service.ts`'s forgot-password) now call `enqueueEmailJob` with a real `${CORS_ORIGIN}/reset-password?token=...` link instead of just logging.
+
+Client-side: `client/src/features/notifications/api.ts` (list/unread-count/mark-read/mark-all-read hooks) and a new `NotificationBell` component (unread-count badge, dropdown list, click-to-mark-read) wired into `AppShell`'s header next to the existing search. Toast notifications: installed `sonner`, mounted a single `<Toaster/>` in `App.tsx`, and added a `MutationCache.onError` default to `query-client.ts` so **every** mutation across the app surfaces its failure as a toast from one place (existing per-page inline error text isn't removed — both now coexist). Added `toast.success(...)` to the highest-value, previously-silent mutations across customers, assets, documents (including a bulk-generate accepted/rejected summary), templates (create/update/archive/duplicate/import/save-draft/publish/restore), users, settings, and field definitions.
+
+8 new integration tests (`server/tests/integration/notifications.test.ts`): document-generated and document-failed notifications fire with the right recipient/email; a 3-row bulk batch produces **exactly one** completion notification and **exactly one** completion email (not one per row); mark-read/mark-all-read/unread-count; per-user isolation within the same org; unauthenticated rejection; invite and forgot-password emails carry the right link. Four existing test files (`documents.test.ts`, `documents-import.test.ts`, `dashboard.test.ts`, `auth.test.ts`) needed a `vi.mock('../../src/queues/email.queue', ...)` added alongside their existing render-queue mock, for the same reason that mock already existed: without it, the real document-creation/forgot-password code paths they exercise would construct a real BullMQ `Queue` and attempt a real Redis connection. Full server suite **153/153 passing**.
+
+**Verified live in a browser**, this time including the email worker actually draining real jobs (not mocked): an ephemeral `mongodb-memory-server` + a local `redis-server.exe` on a scratch port + the real Express app + **both** the render and email BullMQ workers + the real Vite dev server, driven with Playwright. Confirmed: creating a customer shows a "Customer created" toast; generating a document populates the notification bell with an unread badge and the right message; clicking it marks it read and clears the badge; inspecting the scratch Redis queue directly (`bull:email:events`) confirmed each `document.generated` email job actually transitioned `added → waiting → active → completed` through the real worker process, not just the mocked test path.
+
 ---
 
 # Current Work
 
-Nothing is currently mid-implementation. Phase 6a (Dashboard real data) is fully done with no partial files or failing tests. The codebase is at a clean boundary between Phase 6a and Phase 6b.
+Nothing is currently mid-implementation. Phase 6b (Notifications) is fully done with no partial files or failing tests. The codebase is at a clean boundary between Phase 6b and Phase 6c.
 
 ---
 
@@ -106,8 +118,9 @@ Nothing is currently mid-implementation. Phase 6a (Dashboard real data) is fully
 ## Phase 6 — Dashboard, Notifications, Polish (in progress)
 
 - [x] Real KPI cards/charts/recent-activity/storage-usage (Phase 6a)
-- [ ] Install `nodemailer` (not present) + email worker (Phase 6b)
-- [ ] In-app/toast notifications, dark mode, skeleton loaders, Framer Motion (Phase 6c)
+- [x] Install `nodemailer` + email worker (Phase 6b)
+- [x] In-app notifications + toast notifications (Phase 6b)
+- [ ] Dark mode, skeleton loaders, Framer Motion (Phase 6c)
 - [ ] Full Swagger examples per endpoint (Phase 6c)
 
 ## Phase 7 — Production Hardening (not started)
@@ -126,6 +139,7 @@ Nothing is currently mid-implementation. Phase 6a (Dashboard real data) is fully
 3. **S3 storage driver throws on use** (`server/src/storage/index.ts:11`) — intentional Phase 7 placeholder, not a bug, but worth flagging so nobody sets `STORAGE_DRIVER=s3` in any deployed env before Phase 7.
 4. **Root and BullMQ-bundled `ioredis` are two different installed versions** (npm couldn't dedupe them because BullMQ pins an exact version) — harmless at runtime, but means any future code that needs an `IORedis` instance typed against BullMQ's `Queue`/`Worker` connection option must build a plain `RedisOptions` object (see `queues/redis-connection.ts`) rather than constructing its own client, or it won't typecheck.
 5. **`POST /documents` (single-document create) does no server-side field coercion/validation** — only `bulk-generate`'s rows go through `validateAndCoerceRow`. The new Generate page does its own required-field check and type coercion client-side before submitting, but a non-UI API caller can still create a document with missing required fields or wrong-typed values; the engine just renders blanks/raw strings rather than rejecting. Pre-existing scope from Phase 5a, just now more visible with a UI in front of it.
+6. **`CustomersPage`'s optional `email` field rejects an empty string before the form even submits** — found incidentally while live-verifying Phase 6b's toast notifications. `createCustomerSchema`'s `email` is `z.string().email().optional()`, but React Hook Form's uncontrolled `<input>` defaults an untouched field to `''`, not `undefined`, and `.optional()` only accepts `undefined` — so `.email()` runs against `''` and fails. Pre-existing (not introduced by Phase 6b), and outside this phase's scope to fix, but worth a real fix (e.g. `z.literal('').optional()` union, or a `.transform()` to coerce `''` → `undefined`) since today the email field is effectively impossible to leave blank.
 
 ---
 
@@ -140,7 +154,9 @@ Nothing is currently mid-implementation. Phase 6a (Dashboard real data) is fully
 - Bulk-import customer linking only supports an existing `customerId` per row; it rejects rows that reference a customer that doesn't exist yet rather than auto-creating one from inline name/email/phone data — the PRD's other documented branch (10 §10.6), deliberately deferred (see Phase 5b above) since it needs real fuzzy matching and an explicit UI checkbox, not a backend guess.
 - `exceljs`'s bundled types resolve `Buffer` against a much older nested `@types/node` (pulled in transitively via its `@fast-csv` dependency), causing a structural-type mismatch at the one call site that loads a workbook (`import-parsing.ts`) — worked around with a narrow cast to whatever `load()` actually declares. Harmless (Buffer is Buffer at runtime), but a reminder that any other exceljs API touching `Buffer` may need the same treatment.
 - The Designer UI still has no editor for a template's `fields[]` array (verifying Phase 5c required setting fields via direct API calls, bypassing the Designer entirely, same as the live-verification workaround noted under Phase 4) — anyone using only the UI today has no way to declare a template's fields, which the new Generate page and import mapping both depend on. Worth a real fields-editor pass before Phase 5 is considered "polished" end-to-end, though it doesn't block Phase 6.
-- No project-level "run/verify this app" skill exists yet (still true after a second from-scratch improvisation this session, now additionally needing a local Redis instance alongside ephemeral Mongo + Playwright) — increasingly worth capturing via `/run-skill-generator` rather than re-deriving a third time.
+- No project-level "run/verify this app" skill exists yet (still true after a third from-scratch improvisation this session, now needing two BullMQ workers — render and email — alongside ephemeral Mongo + scratch Redis + Playwright) — increasingly worth capturing via `/run-skill-generator` rather than re-deriving a fourth time.
+- Notifications have no pagination UI on the client (the bell shows only the latest 10 via `useNotifications(1, 10)`) — fine for now since nothing yet generates high notification volume per user, but would need a "view all" page if that changes.
+- `sendMail`'s SMTP-not-configured fallback only logs the email; there's no admin-facing indicator anywhere in the UI that email delivery is effectively disabled in an environment that never set `SMTP_HOST` — worth a Settings-page or health-check callout before a real prod deploy.
 
 ---
 
@@ -152,10 +168,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Continue Phase 6: Notifications (6b), then Polish (6c).** Phase 6a (Dashboard real data) is done. Phase 6b covers installing `nodemailer` and building the email worker plus in-app/toast notifications (PRD 10 §10.9's retry/backoff, no-email-configured graceful skip, and deleted-entity notification snapshot edge cases haven't been implemented yet). Phase 6c (dark mode, skeleton loaders, Framer Motion animations, full Swagger examples per endpoint) is lower priority and can follow. A possible follow-up beyond the PRD's explicit Phase 6 scope: PRD 09's NFR calls for the dashboard KPI aggregate to be Redis-cached with a 60s TTL, background-refreshed — not implemented in 6a since Redis isn't yet load-bearing for anything read-heavy, but worth considering once 6b makes Redis usage habitual.
+**Finish Phase 6 with Polish (6c) — the only remaining Phase 6 item.** Dashboard (6a) and Notifications (6b — toast, in-app, and a real email worker with PRD 10 §10.9's retry/backoff and no-email-configured/deleted-entity-snapshot edge cases all handled) are both done. 6c covers dark mode, skeleton loaders, empty-state polish, Framer Motion animations (already an installed dependency, currently unused anywhere), and full Swagger/OpenAPI examples per endpoint. After 6c, Phase 7 (Production Hardening — Docker Compose, CI/CD, S3 driver, load testing) is the only roadmap phase left. Two small pre-existing bugs were flagged during this session (Known Issues #6: `CustomersPage` email field; Technical Debt: no run/verify skill yet) and could be picked off opportunistically alongside 6c.
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 6a (Dashboard real data: KPI cards, documents-over-time chart, recent documents, storage usage, permission-gated recent activity), server and client, verified live in a browser; see `docs/SESSION_LOG.md` for this session's entry. Phase 6b (Notifications) and 6c (Polish) have not been started.
+2026-06-29 — completed Phase 6a (Dashboard real data) and Phase 6b (Notifications: toast, in-app, and a real `nodemailer`+BullMQ email worker), server and client, both verified live in a browser; see `docs/SESSION_LOG.md` for this session's entries. Phase 6c (Polish) has not been started.

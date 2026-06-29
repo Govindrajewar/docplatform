@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ApiResponse, UpdateSettingsInput } from '@platform/shared';
+import { toast } from 'sonner';
 
 import { api } from '@/lib/axios';
 
@@ -28,6 +29,9 @@ export function useUpdateSettings() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: UpdateSettingsInput) => unwrap<Settings>(api.patch('/settings', input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      toast.success('Settings saved');
+    },
   });
 }

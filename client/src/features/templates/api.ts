@@ -10,6 +10,7 @@ import type {
   TemplateStatus,
   UpdateTemplateInput,
 } from '@platform/shared';
+import { toast } from 'sonner';
 
 import { api } from '@/lib/axios';
 
@@ -82,7 +83,10 @@ export function useCreateTemplate() {
   return useMutation({
     mutationFn: (input: CreateTemplateInput) =>
       unwrap<TemplateDetail>(api.post('/templates', input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      toast.success('Template created');
+    },
   });
 }
 
@@ -91,7 +95,10 @@ export function useUpdateTemplate() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateTemplateInput }) =>
       unwrap<TemplateListItem>(api.patch(`/templates/${id}`, input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      toast.success('Template updated');
+    },
   });
 }
 
@@ -99,7 +106,10 @@ export function useArchiveTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<TemplateListItem>(api.delete(`/templates/${id}`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      toast.success('Template archived');
+    },
   });
 }
 
@@ -107,7 +117,10 @@ export function useDuplicateTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<TemplateDetail>(api.post(`/templates/${id}/duplicate`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      toast.success('Template duplicated');
+    },
   });
 }
 
@@ -123,7 +136,10 @@ export function useImportTemplate() {
   return useMutation({
     mutationFn: (bundle: ImportTemplateBundleInput) =>
       unwrap<TemplateDetail>(api.post('/templates/import', bundle)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['templates'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      toast.success('Template imported');
+    },
   });
 }
 
@@ -157,6 +173,7 @@ export function useSaveTemplateVersion() {
       unwrap<TemplateVersionItem>(api.post(`/templates/${templateId}/versions`, input)),
     onSuccess: (_data, { templateId }) => {
       queryClient.invalidateQueries({ queryKey: ['templates', templateId] });
+      toast.success('Draft saved');
     },
   });
 }
@@ -173,6 +190,7 @@ export function usePublishTemplateVersion() {
     onSuccess: (_data, { templateId }) => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
       queryClient.invalidateQueries({ queryKey: ['templates', templateId, 'versions'] });
+      toast.success('Version published');
     },
   });
 }
@@ -187,6 +205,7 @@ export function useRestoreTemplateVersion() {
     onSuccess: (_data, { templateId }) => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
       queryClient.invalidateQueries({ queryKey: ['templates', templateId, 'versions'] });
+      toast.success('Version restored');
     },
   });
 }

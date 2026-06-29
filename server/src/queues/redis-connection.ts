@@ -8,8 +8,11 @@ import { env } from '../config/env';
  * instance as `connection` fails to typecheck across the two copies. Passing a plain options
  * object instead sidesteps that, since `RedisOptions` is a plain interface and BullMQ
  * constructs the client itself (with its own bundled `ioredis`).
+ *
+ * Shared by every BullMQ queue/worker in this codebase (render, email) — nothing here is
+ * specific to any one queue.
  */
-export function buildRenderQueueConnection(): RedisOptions {
+export function buildQueueConnection(): RedisOptions {
   const url = new URL(env.REDIS_URL);
   return {
     host: url.hostname,

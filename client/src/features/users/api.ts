@@ -5,6 +5,7 @@ import type {
   PaginationMeta,
   UpdateUserInput,
 } from '@platform/shared';
+import { toast } from 'sonner';
 
 import { api } from '@/lib/axios';
 
@@ -42,7 +43,10 @@ export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateUserInput) => unwrap<UserListItem>(api.post('/users', input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Invitation sent');
+    },
   });
 }
 
@@ -51,7 +55,10 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateUserInput }) =>
       unwrap<UserListItem>(api.patch(`/users/${id}`, input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('User updated');
+    },
   });
 }
 
@@ -59,6 +66,9 @@ export function useDeleteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<{ message: string }>(api.delete(`/users/${id}`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('User removed');
+    },
   });
 }

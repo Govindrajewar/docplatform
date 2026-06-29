@@ -12,6 +12,9 @@ import { registerUser } from '../helpers/register-user';
 vi.mock('../../src/queues/render.queue', () => ({
   enqueueRenderJob: vi.fn(async () => {}),
 }));
+vi.mock('../../src/queues/email.queue', () => ({
+  enqueueEmailJob: vi.fn(async () => {}),
+}));
 
 const app = createApp();
 

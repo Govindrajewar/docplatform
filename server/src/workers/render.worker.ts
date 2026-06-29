@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 
 import { logger } from '../config/logger';
 import { renderDocument } from '../modules/documents/render-document';
-import { buildRenderQueueConnection } from '../queues/redis-connection';
+import { buildQueueConnection } from '../queues/redis-connection';
 import type { RenderJobData } from '../queues/render.queue';
 
 /** The process entrypoint (`npm run worker`, see `workers/index.ts`) wires this up; it shares
@@ -13,7 +13,7 @@ export function createRenderWorker(): Worker<RenderJobData> {
     async (job) => {
       await renderDocument(job.data.documentId);
     },
-    { connection: buildRenderQueueConnection() },
+    { connection: buildQueueConnection() },
   );
 
   worker.on('completed', (job) => logger.info('Render job completed', { jobId: job.id }));

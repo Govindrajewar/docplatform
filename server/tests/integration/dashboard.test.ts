@@ -1,6 +1,6 @@
 import { ROLE_PERMISSIONS, SYSTEM_ROLES } from '@platform/shared';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../../src/app';
 import { connectDatabase, disconnectDatabase } from '../../src/config/db';
@@ -8,6 +8,10 @@ import { hashPassword } from '../../src/modules/auth/password';
 import { RoleModel } from '../../src/models/role.model';
 import { UserModel } from '../../src/models/user.model';
 import { registerUser } from '../helpers/register-user';
+
+vi.mock('../../src/queues/email.queue', () => ({
+  enqueueEmailJob: vi.fn(async () => {}),
+}));
 
 const app = createApp();
 

@@ -1,6 +1,8 @@
 import type { LoginInput, RegisterInput, ResetPasswordInput } from '@platform/shared';
 
+import { env } from '../../config/env';
 import { logger } from '../../config/logger';
+import { enqueueEmailJob } from '../../queues/email.queue';
 import { AppError } from '../../utils/app-error';
 import { auditLogsRepository } from '../audit-logs/audit-logs.repository';
 import { organizationsRepository } from '../organizations/organizations.repository';
@@ -205,8 +207,12 @@ export const authService = {
       },
     );
 
-    // Email worker lands in Phase 6 (PRD 11 §11.2) — log the link as the dev-mode delivery channel for now.
-    logger.info('Password reset link generated', { email: user.email, resetToken: token });
+    const resetUrl = `${env.CORS_ORIGIN}/reset-password?token=${token}`;
+    await enqueueEmailJob({
+      to: user.email,
+      subject: 'Reset your DocPlatform password',
+      text: `Reset your password here: ${resetUrl}\n\nIf you didn't request this, you can ignore this email.`,
+    });
   },
 
   async resetPassword(input: ResetPasswordInput, meta: RequestMeta = {}): Promise<void> {

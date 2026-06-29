@@ -5,6 +5,7 @@ import type {
   PaginationMeta,
   UpdateCustomerInput,
 } from '@platform/shared';
+import { toast } from 'sonner';
 
 import { api } from '@/lib/axios';
 
@@ -43,7 +44,10 @@ export function useCreateCustomer() {
   return useMutation({
     mutationFn: (input: CreateCustomerInput) =>
       unwrap<CustomerListItem>(api.post('/customers', input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer created');
+    },
   });
 }
 
@@ -52,7 +56,10 @@ export function useUpdateCustomer() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateCustomerInput }) =>
       unwrap<CustomerListItem>(api.patch(`/customers/${id}`, input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer updated');
+    },
   });
 }
 
@@ -60,6 +67,9 @@ export function useDeleteCustomer() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap<{ message: string }>(api.delete(`/customers/${id}`)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer deleted');
+    },
   });
 }
