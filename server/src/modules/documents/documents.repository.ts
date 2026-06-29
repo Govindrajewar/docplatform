@@ -10,6 +10,8 @@ export interface DocumentCreateInput {
   customerId?: string | null;
   dataPayload: Record<string, unknown>;
   createdBy: string;
+  batchId?: string | null;
+  batchRowIndex?: number | null;
 }
 
 export const documentsRepository = {

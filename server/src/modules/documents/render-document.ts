@@ -12,6 +12,8 @@ import { TemplateVersionModel } from '../../models/template-version.model';
 import { storageDriver } from '../../storage';
 import { buildAssetMap, collectPreviewAssetReferences } from '../templates/asset-references';
 
+import { generationBatchesRepository } from './generation-batches.repository';
+
 /**
  * The single rendering path shared by the synchronous fast-path (awaited inline in the create
  * request) and the BullMQ worker (consuming the async queue) — see PRD 06 §6.2. Operating on a
@@ -69,10 +71,23 @@ export async function renderDocument(documentId: string): Promise<void> {
     doc.generatedPdfId = generatedPdf._id;
     doc.failureReason = null;
     await doc.save();
+
+    if (doc.batchId) {
+      await generationBatchesRepository.recordOutcome(doc.batchId.toString(), { success: true });
+    }
   } catch (err) {
     logger.error('renderDocument failed', { documentId, err });
+    const failureReason = err instanceof Error ? err.message : 'Unknown rendering error';
     doc.status = 'failed';
-    doc.failureReason = err instanceof Error ? err.message : 'Unknown rendering error';
+    doc.failureReason = failureReason;
     await doc.save();
+
+    if (doc.batchId) {
+      await generationBatchesRepository.recordOutcome(doc.batchId.toString(), {
+        success: false,
+        row: doc.batchRowIndex ?? -1,
+        reason: failureReason,
+      });
+    }
   }
 }

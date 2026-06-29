@@ -20,6 +20,11 @@ const documentSchema = new Schema(
     failureReason: { type: String, default: null },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     isDeleted: { type: Boolean, default: false },
+    // Set only for documents created via /documents/bulk-generate — lets the render path report
+    // per-row outcomes back to the batch (see render-document.ts) without the batch needing to
+    // poll every document individually.
+    batchId: { type: Schema.Types.ObjectId, ref: 'GenerationBatch', default: null, index: true },
+    batchRowIndex: { type: Number, default: null },
   },
   // minimize:false — an empty dataPayload ({}) is a valid, common case (fully static
   // templates with no dynamic fields); Mongoose's default minimize would otherwise strip it

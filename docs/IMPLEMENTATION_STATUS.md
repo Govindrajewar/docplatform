@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~60% complete** (4 of 7 roadmap phases fully shipped, Phase 5 partially done). Phase 5's data-import/bulk-generate half is still outstanding and is one of the larger remaining chunks of work.
+**~65% complete** (4 of 7 roadmap phases fully shipped, Phase 5 done server-side). The only thing standing between here and "Phase 5 fully complete" is the client-side generate/import UI — there is no remaining server-side work in this phase.
 
 ---
 
 # Current Phase
 
-**Phase 5 — Document Generation, partially done.** Single-document generation (sync fast-path + async BullMQ worker, regenerate, soft-delete, PDF retrieval) is implemented and tested end-to-end via the API. CSV/Excel/JSON data import with column mapping, bulk-generate, and batch status polling are not started.
+**Between Phase 5 and Phase 6.** Phase 5 (Document Generation) is complete server-side: single-document generation (sync fast-path + async BullMQ worker, regenerate, soft-delete, PDF retrieval) and data import/bulk-generate (CSV/Excel/JSON parsing, column-mapping suggestion, per-row validation, batch tracking) are both implemented and tested via the API. The corresponding client UI (data-entry form, import-mapping screen, batch progress, documents list/detail pages) has not been built.
 
 ---
 
@@ -67,22 +67,28 @@ Server-side (`server/src/modules/documents/`, `server/src/queues/`, `server/src/
 - **Mongoose `minimize: true` (the default) strips an empty `dataPayload: {}` to `undefined` before the `required` validator runs** — a fully static template with no dynamic fields legitimately has an empty data payload, but document creation failed with `INTERNAL_ERROR` every time. Fixed by setting `minimize: false` on the `Document` schema.
 - (Build-time, not test-time) **`bullmq`'s bundled `ioredis` is a structurally distinct nominal type from the root-level `ioredis` install** (duplicate versions resolved by npm), so passing a constructed `IORedis` instance as BullMQ's `connection` option failed to typecheck. Fixed by passing a plain `RedisOptions` object (parsed from `REDIS_URL` in `queues/redis-connection.ts`) instead of an instantiated client — BullMQ constructs its own client internally from its own bundled copy.
 
+### Phase 5b — Data Import + Bulk Generate ✅ (server-side; client UI remains)
+
+Server-side (`server/src/modules/documents/`): `import-parsing.ts` (CSV via `csv-parse`, XLSX via `exceljs` with a fill-left header-merge heuristic, JSON with single-object-to-array wrapping) and `suggestColumnMapping` (normalized header/label/key match + a small synonym table) power `POST /documents/import` — a stateless multipart-upload preview against a template's _current published version_ `fields[]` (not the global field-definitions list, matching PRD 06 §6.2's "form auto-built from `template.fields[]`"). `row-validation.ts` type-coerces and validates an already-mapped row (number/currency/date/boolean coercion, required-field and regex-pattern checks) and nests it into the dot-path `dataPayload` shape the rendering engine expects (`path.ts`'s `setByPath`, mirroring `engine/resolver/tokens.ts`'s `getByPath`). `POST /documents/bulk-generate` validates every row independently — bad rows are reported, not fatal to the batch (PRD 10 §10.6) — optionally links each row to an existing `customerId`, creates a `GenerationBatch` tracking row, creates one `Document` per accepted row (tagged with `batchId`/`batchRowIndex`), and always enqueues via BullMQ (bulk never uses the sync fast-path, so a large batch can't block the request). `render-document.ts` now reports each document's outcome back to its batch (`$inc` completed/failed counters, `$push` a `{row, reason}` failure entry) so `GET /documents/batches/:batchId` reflects live progress without polling every document. 5 new integration tests; full server suite **141/141 passing**.
+
+**Deliberate scoping decision:** "Customer referenced in import data doesn't exist yet" (PRD 10 §10.6) only implements the _reject_ branch (a row with an unknown `customerId` fails with a clear per-row reason) — the _auto-create-customer-from-inline-data_ branch is not implemented. The PRD itself frames this as "an explicit checkbox in the mapping UI," which doesn't exist yet in this backend-only pass; building real fuzzy name/email matching for auto-create is its own scoped piece of work, tracked in Technical Debt rather than guessed at here.
+
 ---
 
 # Current Work
 
-Nothing is currently mid-implementation. The single-document half of Phase 5 closed out cleanly (API + worker, fully tested) with no partial files or failing tests. The codebase is at a clean checkpoint within Phase 5.
+Nothing is currently mid-implementation. Phase 5 closed out cleanly server-side (single-document generation + data import/bulk-generate, fully tested) with no partial files or failing tests. The codebase is at a clean phase boundary — only the client UI for Phase 5 remains, alongside Phase 6/7.
 
 ---
 
 # Remaining Tasks
 
-## Phase 5b — Data Import + Bulk Generate (not started)
+## Phase 5c — Generation UI (not started)
 
-- [ ] Install `csv-parse`/`exceljs` (or `xlsx`) — none currently installed — for CSV/Excel/JSON import
-- [ ] Auto-generated data-entry form driven by `template.fields[]` (client)
-- [ ] Import mapping UI (`/documents/import`) + bulk-generate (`/documents/bulk-generate`) + batch status polling (`/documents/batches/:batchId`)
-- [ ] Client-side documents list/detail pages, generate-from-template UI
+- [ ] Auto-generated data-entry form driven by the template's current version `fields[]` (client)
+- [ ] Import-mapping screen calling `/documents/import` (file upload → preview → editable column mapping → confirm) and `/documents/bulk-generate`
+- [ ] Batch progress UI polling `/documents/batches/:batchId`
+- [ ] Client-side documents list/detail pages (status, regenerate, download, delete)
 
 ## Phase 6 — Dashboard, Notifications, Polish (not started)
 
@@ -117,6 +123,8 @@ Nothing is currently mid-implementation. The single-document half of Phase 5 clo
 - No project-level "run/verify this app" skill exists yet — verifying the Designer UI required improvising an ephemeral-Mongo + Playwright setup from scratch in a scratch temp directory. Worth capturing as a real project skill (e.g. via `/run-skill-generator`) before the next UI-heavy phase, so it doesn't need re-deriving.
 - The Designer's table-element column editor is raw JSON, not a visual column builder — fine for an admin comfortable with the schema, but worth a real UI before Phase 4 is considered "polished" (tracked here, not blocking Phase 5).
 - Regenerating a document leaves its previous PDF blob orphaned in storage (only the `GeneratedPdf` DB row is replaced via upsert, not the old file on disk/S3) — fine for the local driver during development, but worth a cleanup pass (delete-on-replace, or a GC sweep) before Phase 7's storage hardening.
+- Bulk-import customer linking only supports an existing `customerId` per row; it rejects rows that reference a customer that doesn't exist yet rather than auto-creating one from inline name/email/phone data — the PRD's other documented branch (10 §10.6), deliberately deferred (see Phase 5b above) since it needs real fuzzy matching and an explicit UI checkbox, not a backend guess.
+- `exceljs`'s bundled types resolve `Buffer` against a much older nested `@types/node` (pulled in transitively via its `@fast-csv` dependency), causing a structural-type mismatch at the one call site that loads a workbook (`import-parsing.ts`) — worked around with a narrow cast to whatever `load()` actually declares. Harmless (Buffer is Buffer at runtime), but a reminder that any other exceljs API touching `Buffer` may need the same treatment.
 
 ---
 
@@ -128,10 +136,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Finish Phase 5: Data Import + Bulk Generate (Phase 5b).** Install `csv-parse`/`exceljs` and build the import pipeline — column-mapping against `template.fields[]`, `/documents/import`, `/documents/bulk-generate`, and `/documents/batches/:batchId` for polling — on the server, then the client-side generate-from-template flow (auto-generated data-entry form, import-mapping UI, batch progress). Same sequencing rationale as before: land the import/batch API first so the UI has something real to call.
+**Start Phase 5c: the Generation UI**, the only piece left before Phase 5 is fully done end-to-end — an auto-generated data-entry form driven by `template.fields[]`, an import-mapping screen wired to `/documents/import` + `/documents/bulk-generate`, a batch-progress view polling `/documents/batches/:batchId`, and basic documents list/detail pages. Alternatively, if UI work is being deferred for now, the next backend-shaped option is Phase 6 (dashboard/notifications) per the roadmap. Same sequencing rationale as every prior phase: the API existing first is what made this UI buildable against something real rather than mocked.
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 5a (single-document generation: Documents API, BullMQ render worker, sync/async split); see `docs/SESSION_LOG.md` for this session's entry. Phase 5b (data import/bulk-generate) remains.
+2026-06-29 — completed Phase 5 server-side (Phase 5a single-document generation + Phase 5b data import/bulk-generate); see `docs/SESSION_LOG.md` for this session's entry. Only the client-side generation UI (Phase 5c) remains before Phase 5 is fully done.

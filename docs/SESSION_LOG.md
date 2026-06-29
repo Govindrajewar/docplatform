@@ -4,6 +4,47 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 5b — Data import + bulk-generate)
+
+**Branch:** `main`
+**Commit at session start:** `673572c` (feat: implement Phase 5a document generation) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; `docs/IMPLEMENTATION_STATUS.md`'s "Next Recommended Task" pointed at Phase 5b (data import + bulk-generate), the half of Phase 5 deliberately deferred in the previous session. Read PRD 05 §5.8 (API table), PRD 06 §6.3 (import flow diagram + mapping rules), and PRD 10 §10.6 (import/bulk-generate edge cases) before writing anything, to pin down the exact request/response shapes and the partial-success semantics the PRD requires. Scoped this session to the server-side API only, same backend-before-UI sequencing as every prior phase — the client import/mapping/batch-progress screens remain for a follow-up "Phase 5c" pass.
+
+### Work completed
+
+- Installed `csv-parse` and `exceljs` (PRD-named libraries for CSV/Excel parsing; none were installed yet).
+- **Shared package:** `bulkGenerateSchema` (`{ templateId, rows: Record<string,unknown>[] }`, capped at `MAX_IMPORT_ROWS = 50_000` per PRD 10 §10.6's "rejected up front, not silently truncated" rule).
+- **`server/src/modules/documents/import-parsing.ts`:** `parseImportFile` dispatches by file extension — CSV via `csv-parse/sync`, XLSX via `exceljs` (header-row merged-cell handling approximated by filling a blank header cell with its left neighbor's value, since PRD 10 §10.6 calls for "flattens to the top-left value repeated" and ExcelJS's merge-range API is more bookkeeping than the common horizontally-merged-header case warrants), JSON (wraps a single object into a one-element array, per PRD). `suggestColumnMapping` auto-maps source columns to template fields by normalized header/label/key match plus a small synonym table (`amt`→`amount`, etc.) — a starting suggestion, never silently applied.
+- **`server/src/modules/documents/row-validation.ts` + `path.ts`:** `validateAndCoerceRow` type-coerces a mapped row (number/currency/date/boolean) against the template's declared `fields[]` (required checks, regex `validation.pattern`), building the dot-path-nested `dataPayload` shape `engine/resolver/tokens.ts`'s `getByPath` expects — confirmed by reading the resolver rather than guessing the shape.
+- **`server/src/models/generation-batch.model.ts`:** `GenerationBatch` (totalCount/completedCount/failedCount/failures[]); `Document` gained optional `batchId`/`batchRowIndex` fields so `render-document.ts` can report each row's outcome straight back to its batch (`$inc` counters, `$push` a `{row, reason}` failure) without the batch needing to poll every document.
+- **`server/src/modules/documents/documents.service.ts`:** refactored the repeated "load template, check it's published, load its current version" logic out of `create()` into a shared `loadPublishedVersion` helper, then added `importPreview` (parse + cap + suggest mapping, scoped to the template's _current published version_ `fields[]`, matching PRD 06 §6.2's "form auto-built from `template.fields[]`" rather than the global field-definitions list), `bulkGenerate` (validates every row independently — one bad row never aborts the batch, per PRD 10 §10.6 — optionally resolves a row's `customerId` against an existing customer, creates a `GenerationBatch` + one `Document` per accepted row, always enqueues via BullMQ rather than using the sync/async complexity split, since a bulk request must never block on hundreds of inline renders), and `getBatch`.
+- Wired `POST /documents/import` (multipart, `documents:generate`), `POST /documents/bulk-generate` (`documents:generate`, a 5/min/user rate limit per PRD 05 §5.13), and `GET /documents/batches/:batchId` (`documents:read`) into `documents.routes.ts`.
+- Wrote `server/tests/integration/documents-import.test.ts` (5 tests): CSV column-mapping suggestion, JSON single-object wrapping, mixed valid/invalid bulk-generate rows with per-row failure reporting and batch polling, customerId linking (existing vs. unknown customer), cross-org batch isolation.
+- Full verification pass: `npm run typecheck` (all 3 workspaces, after two type-friction fixes below), `npm run lint` (clean), `npx prettier --check` (clean after one auto-format pass), full server suite **141/141 passing** (136 previous + 5 new).
+
+### Bugs / friction fixed
+
+- **`csv-parse`'s `parse()` rejected the raw `Buffer` with a structural type error** (`Buffer<ArrayBufferLike>` not assignable to `Buffer`) — sidestepped by passing `buffer.toString('utf-8')` instead of the Buffer directly, which `csv-parse` accepts equally well.
+- **`exceljs`'s bundled types resolve `Buffer` against a much older nested `@types/node` (14.18.63, pulled in transitively via its `@fast-csv` dependency)**, while the project's own `@types/node` is 20.x — a different flavor of the same duplicate-package type friction hit in the previous session with `ioredis`/BullMQ. A plain `as Buffer` cast didn't resolve it (the _target_ `Buffer` identifier itself resolves differently depending on which file's import graph TS is walking); fixed by casting to `Parameters<typeof workbook.xlsx.load>[0]` instead — extracting whatever type `load()` actually declares sidesteps the naming clash entirely, regardless of which nested `@types/node` is in play.
+
+### New issues discovered
+
+- Bulk-import customer linking only supports an existing `customerId`; it doesn't implement the PRD's other documented branch (auto-create a customer from inline import data) — a deliberate scope cut, since real auto-create needs fuzzy name/email matching and the PRD itself says it should be an explicit UI checkbox, not a backend default. Tracked in `docs/IMPLEMENTATION_STATUS.md` Technical Debt.
+- `exceljs`/`@fast-csv`'s stale nested `@types/node` is now a known, documented gotcha for any future code touching `workbook.xlsx.load` or similar Buffer-typed exceljs APIs.
+
+### Remaining work
+
+Phase 5c (the generation UI: data-entry form, import-mapping screen, batch-progress view, documents list/detail pages) — see `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task". After that, Phase 6 (dashboard/notifications/polish) is next on the roadmap.
+
+### Recommended next steps
+
+Build the client-side generate-from-template flow against the now-complete Phase 5 API: an auto-generated form from `template.fields[]` for single-document generation, an import/mapping wizard (upload → preview from `/documents/import` → editable mapping → confirm → `/documents/bulk-generate`) for bulk, and a simple polling view for `/documents/batches/:batchId`.
+
+---
+
 ## Session — 2026-06-29 (Phase 5a — Document Generation API + render worker)
 
 **Branch:** `main`
