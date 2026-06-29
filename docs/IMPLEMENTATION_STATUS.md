@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~80% complete** (5 of 7 roadmap phases fully shipped, Phase 6 in progress). Phase 5 (Document Generation) is fully done, server and client. Phase 6a (Dashboard) and 6b (Notifications) are done; Phase 6c (Polish) has its Swagger/OpenAPI half done — only the visual-polish half (dark mode, skeleton loaders, animations) remains.
+**~85% complete** (5 of 7 roadmap phases fully shipped, Phase 6 fully done). Phase 5 (Document Generation) is fully done, server and client. Phase 6 (Dashboard, Notifications, Polish) is now complete in full — all three sub-phases (6a, 6b, 6c) shipped and verified live. Phase 7 (Production Hardening) is the only roadmap phase left.
 
 ---
 
 # Current Phase
 
-**Phase 6 — Dashboard, Notifications, Polish (in progress).** Phase 6a (Dashboard real data) is complete: KPI cards, a documents-over-time chart, recent documents, storage usage, and a permission-gated recent-activity feed, server and client, verified live in a browser. Phase 6b (Notifications — toast, in-app, email worker) is now also complete, server and client, verified live in a browser with a real BullMQ email worker actually consuming jobs. Phase 6c (polish) is half done: full Swagger/OpenAPI documentation (64/64 endpoints) is complete and verified live; dark mode, skeleton loaders, and Framer Motion animations have not been started.
+**Phase 7 — Production Hardening (not started).** Phase 6 is fully done: Phase 6a (Dashboard real data), Phase 6b (Notifications — toast, in-app, email worker), and Phase 6c (Polish — Swagger/OpenAPI docs, dark mode, skeleton loaders, empty states, Framer Motion animations) are all complete, server and client, all verified live in a browser. Phase 7 covers Docker Compose + Dockerfiles, GitHub Actions CI/CD, the S3 storage driver, and load testing/observability — none of it started yet.
 
 ---
 
@@ -111,22 +111,33 @@ Server-side only (`server/src/config/swagger.ts`, all 14 `*.routes.ts` files): e
 
 Verified incrementally rather than all at once: after each batch of route files, a quick `node -e` one-liner loaded `swaggerSpec` and printed the running path count, catching JSDoc/YAML syntax errors immediately rather than after writing all 64 blocks. Final count (46 paths / 64 operations) matched exactly the `grep -rEh "Router\.(get|post|patch|put|delete)\("` count taken at the start of the task, confirming nothing was missed or duplicated. **Live-verified in a browser**: an ephemeral `mongodb-memory-server` + a scratch Redis + the real Express app, with Playwright loading `/api/docs` directly — confirmed all 14 tag groups and all 64 operation blocks render, and that an expanded operation (`POST /users`) shows its description, request body schema, and example JSON correctly. No code changes outside the route/doc-comment files; full server suite still **153/153 passing**.
 
+### Phase 6c (completes Phase 6) — Dark mode, skeleton loaders, empty states, Framer Motion animations ✅
+
+Client-side only — this finishes Phase 6c's visual half, after the Swagger/OpenAPI half above. Discovered while scoping this pass: the org-level `theme` Settings field (`light`/`dark`/`system`, `shared/src/constants/assets.ts`'s `THEMES`) already existed end-to-end on the backend and in the Settings page's form since Phase 2, but nothing in the client ever read it — dark mode was a fully-wired no-op until now.
+
+- **Dark mode**: `client/src/stores/theme.store.ts` (zustand + `persist`, localStorage-backed) holds an optional `override: 'light' | 'dark' | null` (the header toggle's explicit choice) plus a derived `isDark` flag. `client/src/hooks/useThemeSync.ts` resolves the effective theme as `override ?? settings.theme ?? 'system'`, applying/removing the `dark` class on `<html>` and, for `'system'`, subscribing to `window.matchMedia('(prefers-color-scheme: dark)')` so it tracks live OS-theme changes. Mounted once via a `<ThemeSync/>` component inside `App.tsx`'s `QueryClientProvider` (not above it — `useSettings()` needs query-client context, so the sync hook can't run directly in `App()`'s own body). `useSettings()` gained an `{ enabled }` option so it's only queried once authenticated, avoiding 401s on the pre-auth pages. A new `ThemeToggle` header button (sun/moon icon) sets an explicit override, persisting across reloads independent of the org default. Tailwind's `darkMode: 'class'` and the `.dark { ... }` CSS variable overrides in `globals.css` already existed from Phase 1/2 and needed no changes — only the missing "apply the class" wiring was added.
+- **Skeleton loaders**: a `Skeleton` UI primitive (`components/ui/skeleton.tsx`, a pulsing `bg-muted` div) and a `TableSkeleton` (`components/common/TableSkeleton.tsx`, a configurable rows×cols grid of skeleton bars) replace every list page's plain `"Loading…"` text — Customers, Templates, Documents, Assets, Users, Audit Logs. The Dashboard, whose loading layout is a KPI-card grid plus chart/list cards rather than a table, gets a bespoke `DashboardSkeleton` matching that shape instead of reusing `TableSkeleton`.
+- **Empty states**: a reusable `EmptyState` component (`components/common/EmptyState.tsx` — icon, title, optional description/action) replaces every page's ad hoc "No X yet." text row, including inside `NotificationBell`'s dropdown. `UsersPage` deliberately keeps no empty state — an organization always has at least one user (its creator), so the branch is unreachable.
+- **Framer Motion animations** (the dependency was installed since Phase 1 but unused until now): a `FadeIn` wrapper (`components/common/FadeIn.tsx`) fades in each page's loaded content once its skeleton resolves; a `PageTransition` component (`components/common/PageTransition.tsx`, replacing the bare `<Outlet/>` in `AppShell`) fades/slides between routes via `AnimatePresence` keyed on `location.pathname`; `NotificationBell` and `GlobalSearch`'s dropdown panels now fade/scale in and out via `AnimatePresence` instead of snapping open/closed.
+- No new tests — this is a visual-only pass and the client has no test suite (consistent with every prior client-side phase in this project); typecheck and lint both pass clean. Full server suite re-confirmed **153/153 passing** (no server files touched).
+- **Live-verified in a browser**: an ephemeral `mongodb-memory-server` + the real Express app + the real Vite dev server, driven with Playwright (no Redis needed this round — no render/email-queue-dependent flows were exercised). Confirmed: the dashboard shows the KPI-grid skeleton while `/dashboard/summary` is in flight; the customers table shows the row-grid skeleton when the API response is artificially delayed; every list page's empty state renders icon+title+description; the dark-mode toggle switches the whole app (sidebar, cards, inputs, the toggle's own icon) and the choice persists across a route navigation; the notification bell's dropdown opens with a fade/scale animation and shows its own empty state.
+
 ---
 
 # Current Work
 
-Nothing is currently mid-implementation. Phase 6c's Swagger/OpenAPI half is done with no partial files or failing tests. The codebase is at a clean boundary, with only the visual-polish half of Phase 6c (dark mode, skeleton loaders, Framer Motion animations) left before Phase 6 closes out.
+Nothing is currently mid-implementation. Phase 6 is fully done (6a, 6b, and now both halves of 6c) with no partial files or failing tests. The codebase is at a clean boundary between Phase 6 and Phase 7.
 
 ---
 
 # Remaining Tasks
 
-## Phase 6 — Dashboard, Notifications, Polish (in progress)
+## Phase 6 — Dashboard, Notifications, Polish ✅ (complete)
 
 - [x] Real KPI cards/charts/recent-activity/storage-usage (Phase 6a)
 - [x] Install `nodemailer` + email worker (Phase 6b)
 - [x] In-app notifications + toast notifications (Phase 6b)
-- [ ] Dark mode, skeleton loaders, Framer Motion (Phase 6c)
+- [x] Dark mode, skeleton loaders, Framer Motion (Phase 6c)
 - [x] Full Swagger examples per endpoint (Phase 6c)
 
 ## Phase 7 — Production Hardening (not started)
@@ -146,6 +157,7 @@ Nothing is currently mid-implementation. Phase 6c's Swagger/OpenAPI half is done
 4. **Root and BullMQ-bundled `ioredis` are two different installed versions** (npm couldn't dedupe them because BullMQ pins an exact version) — harmless at runtime, but means any future code that needs an `IORedis` instance typed against BullMQ's `Queue`/`Worker` connection option must build a plain `RedisOptions` object (see `queues/redis-connection.ts`) rather than constructing its own client, or it won't typecheck.
 5. **`POST /documents` (single-document create) does no server-side field coercion/validation** — only `bulk-generate`'s rows go through `validateAndCoerceRow`. The new Generate page does its own required-field check and type coercion client-side before submitting, but a non-UI API caller can still create a document with missing required fields or wrong-typed values; the engine just renders blanks/raw strings rather than rejecting. Pre-existing scope from Phase 5a, just now more visible with a UI in front of it.
 6. **`CustomersPage`'s optional `email` field rejects an empty string before the form even submits** — found incidentally while live-verifying Phase 6b's toast notifications. `createCustomerSchema`'s `email` is `z.string().email().optional()`, but React Hook Form's uncontrolled `<input>` defaults an untouched field to `''`, not `undefined`, and `.optional()` only accepts `undefined` — so `.email()` runs against `''` and fails. Pre-existing (not introduced by Phase 6b), and outside this phase's scope to fix, but worth a real fix (e.g. `z.literal('').optional()` union, or a `.transform()` to coerce `''` → `undefined`) since today the email field is effectively impossible to leave blank.
+7. **The header's dark-mode toggle and the org-level Settings "theme" dropdown can disagree** — the toggle sets a client-only `localStorage` override that always wins over the org default once set, by design (so one user's quick light/dark flip doesn't fight with an admin's org-wide preference, and vice versa). But there's no UI affordance telling a user _why_ their toggle isn't matching what Settings says, or a way to clear the override and fall back to the org default short of clearing site data. Minor, but worth a "reset to organization default" action in Settings if this comes up in practice.
 
 ---
 
@@ -174,10 +186,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Finish Phase 6c's remaining visual-polish items — the only thing left before Phase 6 closes out.** Dashboard (6a), Notifications (6b), and Swagger/OpenAPI documentation (6c, server-side) are all done. What's left: dark mode, skeleton loaders, empty-state polish, and Framer Motion animations (already an installed dependency, currently unused anywhere) — all client-side, all visual/UX rather than new functionality. After that, Phase 7 (Production Hardening — Docker Compose, CI/CD, S3 driver, load testing) is the only roadmap phase left. Two small pre-existing bugs were flagged earlier this session (Known Issues #6: `CustomersPage` email field; Technical Debt: no run/verify skill yet) and could be picked off opportunistically alongside the remaining polish work.
+**Start Phase 7 — Production Hardening, the only roadmap phase left.** Phase 6 is fully done (Dashboard, Notifications, and both halves of Polish — Swagger/OpenAPI and the dark-mode/skeleton/animation pass). Phase 7 covers: Docker Compose + per-service Dockerfiles (none exist anywhere in the repo today — local dev depends on cloud-hosted MongoDB Atlas + Upstash Redis), GitHub Actions CI/CD (`.github/workflows/` doesn't exist; lint/typecheck/test only run locally via Husky hooks), the S3 storage driver (currently throws "not implemented yet"), and load testing/observability/a security-checklist pass. Given the size, this phase likely needs its own scoping pass (Docker+CI is one natural chunk, S3+storage-hardening another, load-testing+observability a third) — recommend asking the user how they want it split, similar to how Phase 6b's three channels were scoped. Two small pre-existing bugs remain unfixed and could be picked off opportunistically: Known Issues #6 (`CustomersPage` empty-string email validation) and #7 (theme toggle/org-default disagreement, newly flagged this session).
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 6a (Dashboard real data), Phase 6b (Notifications: toast, in-app, and a real `nodemailer`+BullMQ email worker), and Phase 6c's Swagger/OpenAPI documentation (64/64 endpoints), all verified live in a browser; see `docs/SESSION_LOG.md` for this session's entries. Only Phase 6c's visual-polish items (dark mode, skeleton loaders, animations) remain before Phase 6 is fully closed out.
+2026-06-29 — completed Phase 6a (Dashboard real data), Phase 6b (Notifications: toast, in-app, and a real `nodemailer`+BullMQ email worker), and both halves of Phase 6c (Swagger/OpenAPI documentation for all 64 endpoints, then dark mode/skeleton loaders/empty states/Framer Motion animations), all verified live in a browser; see `docs/SESSION_LOG.md` for this session's entries. **Phase 6 is now fully complete.** Phase 7 (Production Hardening) is the only roadmap phase left.

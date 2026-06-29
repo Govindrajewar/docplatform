@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { createUserSchema, type CreateUserInput, SYSTEM_ROLES } from '@platform/shared';
 
+import { FadeIn } from '@/components/common/FadeIn';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -83,32 +85,34 @@ export function UsersPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton cols={4} />
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="py-2">Name</th>
-                  <th className="py-2">Email</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {data?.items.map((u) => (
-                  <tr key={u.id} className="border-b border-border last:border-0">
-                    <td className="py-2">{u.name}</td>
-                    <td className="py-2">{u.email}</td>
-                    <td className="py-2 capitalize">{u.status}</td>
-                    <td className="py-2 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => deleteUser.mutate(u.id)}>
-                        Remove
-                      </Button>
-                    </td>
+            <FadeIn>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="py-2">Name</th>
+                    <th className="py-2">Email</th>
+                    <th className="py-2">Status</th>
+                    <th className="py-2" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data?.items.map((u) => (
+                    <tr key={u.id} className="border-b border-border last:border-0">
+                      <td className="py-2">{u.name}</td>
+                      <td className="py-2">{u.email}</td>
+                      <td className="py-2 capitalize">{u.status}</td>
+                      <td className="py-2 text-right">
+                        <Button variant="ghost" size="sm" onClick={() => deleteUser.mutate(u.id)}>
+                          Remove
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </FadeIn>
           )}
           {data?.meta && data.meta.totalPages > 1 && (
             <div className="mt-4 flex justify-end gap-2">

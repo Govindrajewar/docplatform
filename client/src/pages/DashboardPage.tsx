@@ -1,6 +1,7 @@
 import {
   Archive,
   FileCheck2,
+  FileClock,
   FileStack,
   HardDrive,
   Link as LinkIcon,
@@ -8,10 +9,42 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { EmptyState } from '@/components/common/EmptyState';
+import { FadeIn } from '@/components/common/FadeIn';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDashboardSummary } from '@/features/dashboard/api';
 import { useMyOrganization } from '@/features/organizations/api';
 import { useAuthStore } from '@/stores/auth.store';
+
+function DashboardSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i}>
+            <CardContent className="pt-6">
+              <Skeleton className="mb-2 h-4 w-24" />
+              <Skeleton className="h-7 w-16" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardContent className="pt-6">
+            <Skeleton className="h-36 w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <Skeleton className="h-36 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -68,9 +101,9 @@ export function DashboardPage() {
       </div>
 
       {isLoading || !summary ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <DashboardSkeleton />
       ) : (
-        <>
+        <FadeIn className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex-row items-center justify-between gap-2 pb-2">
@@ -149,7 +182,7 @@ export function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {summary.recentDocuments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No documents yet.</p>
+                  <EmptyState icon={FileStack} title="No documents yet" />
                 ) : (
                   <ul className="flex flex-col gap-2 text-sm">
                     {summary.recentDocuments.map((doc) => (
@@ -182,7 +215,7 @@ export function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {summary.recentActivity.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+                  <EmptyState icon={FileClock} title="No activity recorded yet" />
                 ) : (
                   <ul className="flex flex-col gap-2 text-sm">
                     {summary.recentActivity.map((entry) => (
@@ -207,7 +240,7 @@ export function DashboardPage() {
               </CardContent>
             </Card>
           )}
-        </>
+        </FadeIn>
       )}
     </div>
   );

@@ -1,6 +1,8 @@
-import { Bell } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Bell, BellOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { EmptyState } from '@/components/common/EmptyState';
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -55,46 +57,54 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-md border border-border bg-card text-sm shadow-md">
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
-            <span className="font-medium">Notifications</span>
-            {count > 0 && (
-              <button
-                type="button"
-                className="text-xs text-primary hover:underline"
-                onClick={() => markAllRead.mutate()}
-              >
-                Mark all read
-              </button>
-            )}
-          </div>
-          <div className="max-h-96 overflow-y-auto">
-            {!data || data.items.length === 0 ? (
-              <p className="px-3 py-6 text-center text-muted-foreground">No notifications yet.</p>
-            ) : (
-              data.items.map((n) => (
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 z-50 mt-2 w-80 rounded-md border border-border bg-card text-sm shadow-md"
+          >
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <span className="font-medium">Notifications</span>
+              {count > 0 && (
                 <button
-                  key={n._id}
                   type="button"
-                  onClick={() => !n.isRead && markRead.mutate(n._id)}
-                  className={cn(
-                    'flex w-full flex-col gap-0.5 border-b border-border px-3 py-2 text-left last:border-0 hover:bg-muted',
-                    !n.isRead && 'bg-primary/5',
-                  )}
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => markAllRead.mutate()}
                 >
-                  <span className="flex items-center gap-1.5 font-medium">
-                    {!n.isRead && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
-                    {n.title}
-                  </span>
-                  <span className="text-muted-foreground">{n.message}</span>
-                  <span className="text-xs text-muted-foreground">{timeAgo(n.createdAt)}</span>
+                  Mark all read
                 </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+              )}
+            </div>
+            <div className="max-h-96 overflow-y-auto">
+              {!data || data.items.length === 0 ? (
+                <EmptyState icon={BellOff} title="No notifications yet" />
+              ) : (
+                data.items.map((n) => (
+                  <button
+                    key={n._id}
+                    type="button"
+                    onClick={() => !n.isRead && markRead.mutate(n._id)}
+                    className={cn(
+                      'flex w-full flex-col gap-0.5 border-b border-border px-3 py-2 text-left last:border-0 hover:bg-muted',
+                      !n.isRead && 'bg-primary/5',
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 font-medium">
+                      {!n.isRead && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                      {n.title}
+                    </span>
+                    <span className="text-muted-foreground">{n.message}</span>
+                    <span className="text-xs text-muted-foreground">{timeAgo(n.createdAt)}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

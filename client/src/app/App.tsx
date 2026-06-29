@@ -5,11 +5,18 @@ import { Toaster } from 'sonner';
 import { AuthBootstrap } from './AuthBootstrap';
 import { router } from './router';
 
+import { useThemeSync } from '@/hooks/useThemeSync';
 import { queryClient } from '@/lib/query-client';
+
+function ThemeSync() {
+  useThemeSync();
+  return null;
+}
 
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeSync />
       <AuthBootstrap>
         <RouterProvider router={router} />
       </AuthBootstrap>

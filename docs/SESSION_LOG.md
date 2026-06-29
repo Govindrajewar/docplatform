@@ -4,6 +4,40 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 6c, completes Phase 6 — dark mode, skeleton loaders, empty states, animations)
+
+**Branch:** `main`
+**Commit at session start:** `8d34c21` (feat: document all API endpoints with Swagger/OpenAPI) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; `docs/IMPLEMENTATION_STATUS.md` pointed at the remaining half of Phase 6c — dark mode, skeleton loaders, empty states, and Framer Motion animations, all client-side. Unlike Phase 6b's three channels (which had real, separable architectural decisions), these three are visually and mechanically similar — each touches most of the same set of pages — so this pass covered all of them together rather than splitting further, since splitting would have meant revisiting the same ~10 files three times over.
+
+A notable discovery while scoping: the org-level `theme` Settings field (`light`/`dark`/`system`) already existed end-to-end — schema, API, and a working dropdown on the Settings page — since Phase 2. Nothing in the client ever read it to actually apply a `dark` class anywhere. Dark mode's CSS (Tailwind `darkMode: 'class'`, full `.dark { --background: ...; }` variable overrides in `globals.css`) was also already fully scaffolded from Phase 1/2. The only missing piece was the application wiring.
+
+### Work completed
+
+- **Dark mode**: `client/src/stores/theme.store.ts` (zustand + `persist`) holds an optional local `override` (`'light' | 'dark' | null`) plus a derived `isDark` flag. `client/src/hooks/useThemeSync.ts` computes the effective theme as `override ?? settings.theme ?? 'system'`, applies/removes the `dark` class on `<html>`, and for `'system'` subscribes to `matchMedia('(prefers-color-scheme: dark)')` so OS-level theme changes take effect live. Mounted via a `<ThemeSync/>` component placed inside `App.tsx`'s `QueryClientProvider` (not in `App()`'s own body — `useSettings()` needs query-client context that isn't available until inside the provider's subtree). `useSettings()` gained an `{ enabled }` option so it's only queried once authenticated, avoiding 401 noise on pre-auth pages. A new `ThemeToggle` header button (sun/moon icon, in `AppShell`) sets an explicit override that persists across reloads independent of the org default.
+- **Skeleton loaders**: `components/ui/skeleton.tsx` (a pulsing div primitive) and `components/common/TableSkeleton.tsx` (configurable rows×cols grid) replace the plain `"Loading…"` text on every list page — Customers, Templates, Documents, Assets, Users, Audit Logs. Dashboard gets a bespoke `DashboardSkeleton` matching its KPI-card-grid-plus-charts layout instead.
+- **Empty states**: `components/common/EmptyState.tsx` (icon + title + optional description/action) replaces every page's inline "No X yet." text, including inside `NotificationBell`'s dropdown. `UsersPage` deliberately has no empty state added — an org always has at least one user (its creator).
+- **Animations**: `framer-motion` had been an installed, unused dependency since Phase 1. `components/common/FadeIn.tsx` fades in loaded content once a skeleton resolves; `components/common/PageTransition.tsx` replaces `AppShell`'s bare `<Outlet/>` with an `AnimatePresence`-driven fade/slide keyed on route; `NotificationBell` and `GlobalSearch`'s dropdowns now animate open/close instead of snapping.
+- No new tests (visual-only change; the client has no test suite, consistent with every prior client phase). Typecheck and lint both pass clean. Full server suite re-confirmed passing (no server files touched).
+- **Live-verified in a browser**: an ephemeral `mongodb-memory-server` + the real Express app + the real Vite dev server, driven with Playwright — no Redis needed this round since no render/email-queue flows were exercised. Confirmed: the dashboard shows its KPI-grid skeleton while the summary request is in flight (caught by routing a delay into the request); the customers table shows its row-grid skeleton the same way; every list page's empty state renders correctly; toggling dark mode recolors the whole app and the choice survives a route change; the notification bell's dropdown opens with a fade/scale animation and shows its own `EmptyState`.
+
+### Bugs fixed
+
+- None in product code. One verification-environment mistake along the way: the scratch bootstrap script set `process.env.MONGO_URI` instead of the actual expected variable name `MONGODB_URI` (`server/src/config/env.ts`), causing the app to silently fall through to the real `.env`'s MongoDB Atlas connection string instead of the ephemeral in-memory server — caught immediately from the `MongooseServerSelectionError` mentioning Atlas shard hostnames, fixed by correcting the variable name. No real Atlas data was touched (the connection never succeeded).
+
+### New issues discovered
+
+- **New, minor**: the header's dark-mode toggle (a local override) and the org-level Settings "theme" dropdown can now disagree, by design — the override always wins once set, with no UI explaining why or an easy way to clear it back to the org default. Flagged as Known Issues #7, not fixed — minor enough to defer.
+
+### Remaining work
+
+Phase 6 is now fully complete (6a, 6b, and both halves of 6c). Phase 7 (Production Hardening — Docker Compose, CI/CD, S3 driver, load testing) is the only roadmap phase left and likely needs its own scoping pass given its size — see `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task".
+
+---
+
 ## Session — 2026-06-29 (Phase 6c, partial — Swagger/OpenAPI documentation)
 
 **Branch:** `main`

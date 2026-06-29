@@ -1,6 +1,10 @@
+import { Image } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { ASSET_TYPES, type AssetType } from '@platform/shared';
 
+import { EmptyState } from '@/components/common/EmptyState';
+import { FadeIn } from '@/components/common/FadeIn';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -87,51 +91,57 @@ export function AssetsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton cols={4} />
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="py-2">File</th>
-                  <th className="py-2">Type</th>
-                  <th className="py-2">Size</th>
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {data?.items.map((asset) => (
-                  <tr key={asset._id} className="border-b border-border last:border-0">
-                    <td className="py-2">
-                      <button
-                        type="button"
-                        onClick={() => openAssetFile(asset._id)}
-                        className="text-primary hover:underline"
-                      >
-                        {asset.originalFilename}
-                      </button>
-                    </td>
-                    <td className="py-2 capitalize">{asset.type}</td>
-                    <td className="py-2">{formatBytes(asset.sizeBytes)}</td>
-                    <td className="py-2 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteAsset.mutate(asset._id)}
-                      >
-                        Delete
-                      </Button>
-                    </td>
+            <FadeIn>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="py-2">File</th>
+                    <th className="py-2">Type</th>
+                    <th className="py-2">Size</th>
+                    <th className="py-2" />
                   </tr>
-                ))}
-                {data?.items.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-6 text-center text-muted-foreground">
-                      No assets uploaded yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data?.items.map((asset) => (
+                    <tr key={asset._id} className="border-b border-border last:border-0">
+                      <td className="py-2">
+                        <button
+                          type="button"
+                          onClick={() => openAssetFile(asset._id)}
+                          className="text-primary hover:underline"
+                        >
+                          {asset.originalFilename}
+                        </button>
+                      </td>
+                      <td className="py-2 capitalize">{asset.type}</td>
+                      <td className="py-2">{formatBytes(asset.sizeBytes)}</td>
+                      <td className="py-2 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteAsset.mutate(asset._id)}
+                        >
+                          Delete
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {data?.items.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          icon={Image}
+                          title="No assets uploaded yet"
+                          description="Upload a logo, signature, or font above to use it in your templates."
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </FadeIn>
           )}
         </CardContent>
       </Card>

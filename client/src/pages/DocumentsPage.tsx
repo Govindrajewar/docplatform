@@ -1,6 +1,10 @@
+import { FileStack } from 'lucide-react';
 import { useState } from 'react';
 import type { DocumentStatus } from '@platform/shared';
 
+import { EmptyState } from '@/components/common/EmptyState';
+import { FadeIn } from '@/components/common/FadeIn';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -56,64 +60,70 @@ export function DocumentsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton cols={4} />
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="py-2">Template</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Created</th>
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {data?.items.map((d) => (
-                  <tr key={d._id} className="border-b border-border last:border-0">
-                    <td className="py-2">{templateNameById.get(d.templateId) ?? d.templateId}</td>
-                    <td className="py-2">
-                      <span className="capitalize">{d.status}</span>
-                      {d.status === 'failed' && d.failureReason && (
-                        <p className="text-xs text-destructive">{d.failureReason}</p>
-                      )}
-                    </td>
-                    <td className="py-2">{new Date(d.createdAt).toLocaleString()}</td>
-                    <td className="py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        {d.status === 'generated' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void openDocumentPdf(d._id)}
-                          >
-                            Download
-                          </Button>
-                        )}
-                        {(d.status === 'failed' || d.status === 'generated') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => regenerate.mutate(d._id)}
-                          >
-                            Regenerate
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="sm" onClick={() => remove.mutate(d._id)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </td>
+            <FadeIn>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="py-2">Template</th>
+                    <th className="py-2">Status</th>
+                    <th className="py-2">Created</th>
+                    <th className="py-2" />
                   </tr>
-                ))}
-                {data?.items.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-6 text-center text-muted-foreground">
-                      No documents yet — generate one from a template.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data?.items.map((d) => (
+                    <tr key={d._id} className="border-b border-border last:border-0">
+                      <td className="py-2">{templateNameById.get(d.templateId) ?? d.templateId}</td>
+                      <td className="py-2">
+                        <span className="capitalize">{d.status}</span>
+                        {d.status === 'failed' && d.failureReason && (
+                          <p className="text-xs text-destructive">{d.failureReason}</p>
+                        )}
+                      </td>
+                      <td className="py-2">{new Date(d.createdAt).toLocaleString()}</td>
+                      <td className="py-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          {d.status === 'generated' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void openDocumentPdf(d._id)}
+                            >
+                              Download
+                            </Button>
+                          )}
+                          {(d.status === 'failed' || d.status === 'generated') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => regenerate.mutate(d._id)}
+                            >
+                              Regenerate
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" onClick={() => remove.mutate(d._id)}>
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {data?.items.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          icon={FileStack}
+                          title="No documents yet"
+                          description="Generate one from a published template to see it here."
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </FadeIn>
           )}
           {data?.meta && data.meta.totalPages > 1 && (
             <div className="mt-4 flex justify-end gap-2">

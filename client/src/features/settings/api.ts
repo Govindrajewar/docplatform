@@ -18,10 +18,11 @@ async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T>
   return data.data;
 }
 
-export function useSettings() {
+export function useSettings(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['settings'],
     queryFn: () => unwrap<Settings>(api.get('/settings')),
+    enabled: options?.enabled,
   });
 }
 

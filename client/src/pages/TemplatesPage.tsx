@@ -1,9 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { FileText } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { createTemplateSchema, type CreateTemplateInput } from '@platform/shared';
 
+import { EmptyState } from '@/components/common/EmptyState';
+import { FadeIn } from '@/components/common/FadeIn';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -123,80 +127,86 @@ export function TemplatesPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton cols={4} />
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="py-2">Name</th>
-                  <th className="py-2">Type</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {data?.items.map((t) => (
-                  <tr key={t._id} className="border-b border-border last:border-0">
-                    <td className="py-2">
-                      <Link
-                        to={`/templates/${t._id}/design`}
-                        className="text-primary hover:underline"
-                      >
-                        {t.name}
-                      </Link>
-                    </td>
-                    <td className="py-2">{t.documentType}</td>
-                    <td className="py-2 capitalize">{t.status}</td>
-                    <td className="py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        {t.currentVersionId && (
-                          <Link
-                            to={`/templates/${t._id}/generate`}
-                            className="inline-flex h-9 items-center rounded-md px-3 text-sm font-medium hover:bg-muted"
-                          >
-                            Generate
-                          </Link>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => duplicateTemplate.mutate(t._id)}
+            <FadeIn>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="py-2">Name</th>
+                    <th className="py-2">Type</th>
+                    <th className="py-2">Status</th>
+                    <th className="py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {data?.items.map((t) => (
+                    <tr key={t._id} className="border-b border-border last:border-0">
+                      <td className="py-2">
+                        <Link
+                          to={`/templates/${t._id}/design`}
+                          className="text-primary hover:underline"
                         >
-                          Duplicate
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            exportTemplate.mutate(t._id, {
-                              onSuccess: (bundle) => downloadJson(`${t.name}.json`, bundle),
-                            })
-                          }
-                        >
-                          Export
-                        </Button>
-                        {t.status !== 'archived' && (
+                          {t.name}
+                        </Link>
+                      </td>
+                      <td className="py-2">{t.documentType}</td>
+                      <td className="py-2 capitalize">{t.status}</td>
+                      <td className="py-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          {t.currentVersionId && (
+                            <Link
+                              to={`/templates/${t._id}/generate`}
+                              className="inline-flex h-9 items-center rounded-md px-3 text-sm font-medium hover:bg-muted"
+                            >
+                              Generate
+                            </Link>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => archiveTemplate.mutate(t._id)}
+                            onClick={() => duplicateTemplate.mutate(t._id)}
                           >
-                            Archive
+                            Duplicate
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {data?.items.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-6 text-center text-muted-foreground">
-                      No templates yet — create one above.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              exportTemplate.mutate(t._id, {
+                                onSuccess: (bundle) => downloadJson(`${t.name}.json`, bundle),
+                              })
+                            }
+                          >
+                            Export
+                          </Button>
+                          {t.status !== 'archived' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => archiveTemplate.mutate(t._id)}
+                            >
+                              Archive
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {data?.items.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          icon={FileText}
+                          title="No templates yet"
+                          description="Create your first template above to start designing documents."
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </FadeIn>
           )}
           {data?.meta && data.meta.totalPages > 1 && (
             <div className="mt-4 flex justify-end gap-2">
