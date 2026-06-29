@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~80% complete** (5 of 7 roadmap phases fully shipped, Phase 6 in progress). Phase 5 (Document Generation) is fully done, server and client. Phase 6a (Dashboard) and 6b (Notifications) are done; Polish (6c) remains.
+**~80% complete** (5 of 7 roadmap phases fully shipped, Phase 6 in progress). Phase 5 (Document Generation) is fully done, server and client. Phase 6a (Dashboard) and 6b (Notifications) are done; Phase 6c (Polish) has its Swagger/OpenAPI half done — only the visual-polish half (dark mode, skeleton loaders, animations) remains.
 
 ---
 
 # Current Phase
 
-**Phase 6 — Dashboard, Notifications, Polish (in progress).** Phase 6a (Dashboard real data) is complete: KPI cards, a documents-over-time chart, recent documents, storage usage, and a permission-gated recent-activity feed, server and client, verified live in a browser. Phase 6b (Notifications — toast, in-app, email worker) is now also complete, server and client, verified live in a browser with a real BullMQ email worker actually consuming jobs. Phase 6c (polish — dark mode, skeleton loaders, animations, full Swagger) has not been started.
+**Phase 6 — Dashboard, Notifications, Polish (in progress).** Phase 6a (Dashboard real data) is complete: KPI cards, a documents-over-time chart, recent documents, storage usage, and a permission-gated recent-activity feed, server and client, verified live in a browser. Phase 6b (Notifications — toast, in-app, email worker) is now also complete, server and client, verified live in a browser with a real BullMQ email worker actually consuming jobs. Phase 6c (polish) is half done: full Swagger/OpenAPI documentation (64/64 endpoints) is complete and verified live; dark mode, skeleton loaders, and Framer Motion animations have not been started.
 
 ---
 
@@ -105,11 +105,17 @@ Client-side: `client/src/features/notifications/api.ts` (list/unread-count/mark-
 
 **Verified live in a browser**, this time including the email worker actually draining real jobs (not mocked): an ephemeral `mongodb-memory-server` + a local `redis-server.exe` on a scratch port + the real Express app + **both** the render and email BullMQ workers + the real Vite dev server, driven with Playwright. Confirmed: creating a customer shows a "Customer created" toast; generating a document populates the notification bell with an unread badge and the right message; clicking it marks it read and clears the badge; inspecting the scratch Redis queue directly (`bull:email:events`) confirmed each `document.generated` email job actually transitioned `added → waiting → active → completed` through the real worker process, not just the mocked test path.
 
+### Phase 6c (partial) — Swagger/OpenAPI documentation ✅ (visual polish — dark mode, skeleton loaders, animations — remains)
+
+Server-side only (`server/src/config/swagger.ts`, all 14 `*.routes.ts` files): every one of the 64 registered route operations (46 unique paths) now has an `@openapi` JSDoc block directly above its route registration, covering summary, parameters, request body (including multipart for asset/document-import uploads), and response schemas for every status code the handler can actually return. `swagger.ts` was extended with shared reusable pieces rather than repeating them per endpoint: an `Error` schema and `PaginationMeta` schema matching the exact runtime shapes from `error-handler.ts`/`api-response.ts`, plus shared `responses` refs (`Unauthorized`, `Forbidden`, `NotFound`, `ValidationError`, `Conflict`) and 14 `tags` with descriptions, one per module. Binary responses (`GET /documents/{id}/pdf` → `application/pdf`, `GET /assets/{id}/file` → `application/octet-stream`) and multipart request bodies (asset upload, document CSV/XLSX/JSON import) are modeled correctly rather than glossed over as generic JSON. The template layout JSON (`templateDocumentSchema`, 15 element types deep) is deliberately **not** exhaustively modeled in OpenAPI — it's described as `type: object` with a pointer to `docs/PRD/04-template-json-schema.md`, a scoped simplification rather than a multi-hour structural-modeling exercise disproportionate to a "polish" task.
+
+Verified incrementally rather than all at once: after each batch of route files, a quick `node -e` one-liner loaded `swaggerSpec` and printed the running path count, catching JSDoc/YAML syntax errors immediately rather than after writing all 64 blocks. Final count (46 paths / 64 operations) matched exactly the `grep -rEh "Router\.(get|post|patch|put|delete)\("` count taken at the start of the task, confirming nothing was missed or duplicated. **Live-verified in a browser**: an ephemeral `mongodb-memory-server` + a scratch Redis + the real Express app, with Playwright loading `/api/docs` directly — confirmed all 14 tag groups and all 64 operation blocks render, and that an expanded operation (`POST /users`) shows its description, request body schema, and example JSON correctly. No code changes outside the route/doc-comment files; full server suite still **153/153 passing**.
+
 ---
 
 # Current Work
 
-Nothing is currently mid-implementation. Phase 6b (Notifications) is fully done with no partial files or failing tests. The codebase is at a clean boundary between Phase 6b and Phase 6c.
+Nothing is currently mid-implementation. Phase 6c's Swagger/OpenAPI half is done with no partial files or failing tests. The codebase is at a clean boundary, with only the visual-polish half of Phase 6c (dark mode, skeleton loaders, Framer Motion animations) left before Phase 6 closes out.
 
 ---
 
@@ -121,7 +127,7 @@ Nothing is currently mid-implementation. Phase 6b (Notifications) is fully done 
 - [x] Install `nodemailer` + email worker (Phase 6b)
 - [x] In-app notifications + toast notifications (Phase 6b)
 - [ ] Dark mode, skeleton loaders, Framer Motion (Phase 6c)
-- [ ] Full Swagger examples per endpoint (Phase 6c)
+- [x] Full Swagger examples per endpoint (Phase 6c)
 
 ## Phase 7 — Production Hardening (not started)
 
@@ -168,10 +174,10 @@ None. The codebase is in a clean, fully-tested state with no partial work in pro
 
 # Next Recommended Task
 
-**Finish Phase 6 with Polish (6c) — the only remaining Phase 6 item.** Dashboard (6a) and Notifications (6b — toast, in-app, and a real email worker with PRD 10 §10.9's retry/backoff and no-email-configured/deleted-entity-snapshot edge cases all handled) are both done. 6c covers dark mode, skeleton loaders, empty-state polish, Framer Motion animations (already an installed dependency, currently unused anywhere), and full Swagger/OpenAPI examples per endpoint. After 6c, Phase 7 (Production Hardening — Docker Compose, CI/CD, S3 driver, load testing) is the only roadmap phase left. Two small pre-existing bugs were flagged during this session (Known Issues #6: `CustomersPage` email field; Technical Debt: no run/verify skill yet) and could be picked off opportunistically alongside 6c.
+**Finish Phase 6c's remaining visual-polish items — the only thing left before Phase 6 closes out.** Dashboard (6a), Notifications (6b), and Swagger/OpenAPI documentation (6c, server-side) are all done. What's left: dark mode, skeleton loaders, empty-state polish, and Framer Motion animations (already an installed dependency, currently unused anywhere) — all client-side, all visual/UX rather than new functionality. After that, Phase 7 (Production Hardening — Docker Compose, CI/CD, S3 driver, load testing) is the only roadmap phase left. Two small pre-existing bugs were flagged earlier this session (Known Issues #6: `CustomersPage` email field; Technical Debt: no run/verify skill yet) and could be picked off opportunistically alongside the remaining polish work.
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 6a (Dashboard real data) and Phase 6b (Notifications: toast, in-app, and a real `nodemailer`+BullMQ email worker), server and client, both verified live in a browser; see `docs/SESSION_LOG.md` for this session's entries. Phase 6c (Polish) has not been started.
+2026-06-29 — completed Phase 6a (Dashboard real data), Phase 6b (Notifications: toast, in-app, and a real `nodemailer`+BullMQ email worker), and Phase 6c's Swagger/OpenAPI documentation (64/64 endpoints), all verified live in a browser; see `docs/SESSION_LOG.md` for this session's entries. Only Phase 6c's visual-polish items (dark mode, skeleton loaders, animations) remain before Phase 6 is fully closed out.

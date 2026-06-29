@@ -4,6 +4,38 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 6c, partial — Swagger/OpenAPI documentation)
+
+**Branch:** `main`
+**Commit at session start:** `bff207f` (feat: implement Phase 6b notifications) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; `docs/IMPLEMENTATION_STATUS.md` pointed at Phase 6c (Polish), which the PRD frames as two unrelated halves — dark mode/skeleton loaders/animations (visual UX) vs. full Swagger/OpenAPI documentation (API docs). Scoped this pass to Swagger only, stating the split to the user up front rather than asking, since the two halves don't share files or review surface and the session has consistently split unrelated work into separate increments.
+
+### Work completed
+
+- `server/src/config/swagger.ts` — added a reusable `Error` schema and `PaginationMeta` schema matching the exact runtime response shapes from `error-handler.ts`/`app-error.ts`/`api-response.ts`, shared `responses` refs (`Unauthorized`, `Forbidden`, `NotFound`, `ValidationError`, `Conflict`), and 14 `tags` with one-line descriptions, one per module.
+- All 14 `*.routes.ts` files got an `@openapi` JSDoc block above every route registration: `health` (2), `auth` (7), `organizations` (2), `users` (5), `settings` (2), `customers` (5), `assets` (5, including multipart upload + binary file download), `search` (1), `audit-logs` (2), `dashboard` (1), `notifications` (4), `field-definitions` (4), `documents` (9, including multipart import + `application/pdf` binary download), `templates` (15, the largest — preserved the existing route-ordering comment about `/versions/compare` needing registration before `/versions/:versionId`). Total: **64 operations across 46 unique paths**.
+- The template layout JSON (`templateDocumentSchema`) is deliberately documented as `type: object` with a pointer to `docs/PRD/04-template-json-schema.md` rather than exhaustively modeled — a 15-element-type, deeply nested structure that would take disproportionately long to model fully for a "polish" task.
+- Verified incrementally: after each batch of route files, `node -e "require('tsx/cjs'); const { swaggerSpec } = require('./src/config/swagger.ts'); console.log(Object.keys(swaggerSpec.paths).length)"` confirmed the running path count and caught any JSDoc/YAML syntax mistakes immediately. Final count matched the `grep -rEh "Router\.(get|post|patch|put|delete)\("` count taken at the start (64), confirming no endpoint was missed or duplicated.
+- **Live-verified in a browser**: an ephemeral `mongodb-memory-server` + a scratch `redis-server.exe` on port 6390 + the real Express app, driven with Playwright loading `/api/docs` directly. Two screenshots confirmed: the full Swagger UI overview shows all 14 tag groups and all 64 operation blocks; an expanded `POST /users` operation renders its description, request body schema, and example JSON correctly.
+- Full server suite re-run after the doc changes: **153/153 passing** (no source logic touched, only `*.routes.ts` doc comments and `swagger.ts`).
+
+### Bugs fixed
+
+- None in product code — this was a documentation-only pass with no behavior changes.
+
+### New issues discovered
+
+- None. (A throwaway verification-script issue — a Playwright `text=` selector containing `{...}` path params was misparsed as a regex literal — was a script bug, not a product bug, and was worked around with a simpler selector.)
+
+### Remaining work
+
+Phase 6c's Swagger half is done. Only the visual-polish half (dark mode, skeleton loaders, empty-state polish, Framer Motion animations) remains before Phase 6 is fully closed out and Phase 7 (Production Hardening) becomes next — see `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task".
+
+---
+
 ## Session — 2026-06-29 (Phase 6b — Notifications: toast, in-app, email worker)
 
 **Branch:** `main`
