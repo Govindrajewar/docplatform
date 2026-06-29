@@ -13,5 +13,6 @@ export const ERROR_CODES = [
   'INVALID_TOKEN',
   'LAST_ADMIN',
   'STALE_VERSION',
+  'NOT_READY',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

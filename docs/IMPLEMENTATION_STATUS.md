@@ -6,13 +6,13 @@
 
 # Overall Progress
 
-**~55% complete** (4 of 7 roadmap phases fully shipped). Phase weighting is uneven — Phase 5 (Document Generation + queue) is one of the two largest remaining phases, so phase-count percentage slightly overstates remaining effort.
+**~60% complete** (4 of 7 roadmap phases fully shipped, Phase 5 partially done). Phase 5's data-import/bulk-generate half is still outstanding and is one of the larger remaining chunks of work.
 
 ---
 
 # Current Phase
 
-**Between Phase 4 and Phase 5.** Phase 4 (Templates API + Designer UI) is complete, demoed end-to-end in a real browser, and its exit criteria is met: an admin can create a template, design it visually (drag/resize elements, edit properties), save drafts, render a live preview via the real PDF engine, and publish it — with zero backend code changes. Phase 5 (Document Generation) has not been started.
+**Phase 5 — Document Generation, partially done.** Single-document generation (sync fast-path + async BullMQ worker, regenerate, soft-delete, PDF retrieval) is implemented and tested end-to-end via the API. CSV/Excel/JSON data import with column mapping, bulk-generate, and batch status polling are not started.
 
 ---
 
@@ -57,23 +57,32 @@ Client-side (`client/src/features/templates/`, `client/src/pages/TemplatesPage.t
 - Field Definitions reuses the `templates:read`/`templates:write` permissions rather than a new RBAC resource, since PRD 07 §7.1's permission table has no dedicated `field-definitions` resource and the API sits right under Templates in PRD 05.
 - The Designer's property panel gives full type-specific controls to the most common ~10 element types; `table` columns are edited as raw JSON (no visual column builder yet) — a scoped, documented simplification rather than building a bespoke column editor in this pass.
 
+### Phase 5a — Single-Document Generation ✅ (Phase 5 partial — see Remaining Tasks for Phase 5b)
+
+Server-side (`server/src/modules/documents/`, `server/src/queues/`, `server/src/workers/`): `Document` + `GeneratedPdf` models, a single `renderDocument(documentId)` function shared by both the synchronous fast-path (awaited inline on create/regenerate) and the BullMQ worker, with the split decided by a row-counting complexity heuristic (`complexity.ts`, >200 rows routes to the async queue). Full CRUD-ish surface: create (validates the template is published, pins `templateVersionId`), get, list (with templateId/customerId/status filters), regenerate (re-renders against the pinned version), soft-delete, and PDF retrieval (`409 NOT_READY` while generating, `409 CONFLICT` with the failure reason if rendering failed). The BullMQ queue (`render.queue.ts`) is a lazily-constructed singleton, only ever touched once a document crosses the async threshold, so the existing small-payload test suite never instantiates Redis/BullMQ at all; the worker (`workers/index.ts`, `npm run worker`) is a separate process entrypoint never imported by `app.ts`. 8 new integration tests; full server suite 136/136 passing.
+
+**Two real bugs found and fixed while writing tests (not by inspection):**
+
+- **`GeneratedPdfModel.documentId` unique-index conflict on regenerate** — `renderDocument` always called `GeneratedPdfModel.create(...)`, so a second render of the same document (via `/regenerate`) hit a duplicate-key error, silently caught by the render try/catch and surfaced as a generic `status: 'failed'`. Fixed by upserting (`findOneAndUpdate` with `upsert: true`) instead of always creating.
+- **Mongoose `minimize: true` (the default) strips an empty `dataPayload: {}` to `undefined` before the `required` validator runs** — a fully static template with no dynamic fields legitimately has an empty data payload, but document creation failed with `INTERNAL_ERROR` every time. Fixed by setting `minimize: false` on the `Document` schema.
+- (Build-time, not test-time) **`bullmq`'s bundled `ioredis` is a structurally distinct nominal type from the root-level `ioredis` install** (duplicate versions resolved by npm), so passing a constructed `IORedis` instance as BullMQ's `connection` option failed to typecheck. Fixed by passing a plain `RedisOptions` object (parsed from `REDIS_URL` in `queues/redis-connection.ts`) instead of an instantiated client — BullMQ constructs its own client internally from its own bundled copy.
+
 ---
 
 # Current Work
 
-Nothing is currently mid-implementation. Phase 4 closed out cleanly (server-side + client-side, fully verified live) with no partial files or failing tests. The codebase is at a clean phase boundary.
+Nothing is currently mid-implementation. The single-document half of Phase 5 closed out cleanly (API + worker, fully tested) with no partial files or failing tests. The codebase is at a clean checkpoint within Phase 5.
 
 ---
 
 # Remaining Tasks
 
-## Phase 5 — Document Generation (not started)
+## Phase 5b — Data Import + Bulk Generate (not started)
 
-- [ ] Install `bullmq` (not in `server/package.json` yet) + `server/src/workers/` render worker
-- [ ] `server/src/modules/documents/` — create (sync/async split by complexity estimate), regenerate, delete, signed-URL PDF retrieval
 - [ ] Install `csv-parse`/`exceljs` (or `xlsx`) — none currently installed — for CSV/Excel/JSON import
 - [ ] Auto-generated data-entry form driven by `template.fields[]` (client)
-- [ ] Import mapping UI + bulk-generate + batch status polling
+- [ ] Import mapping UI (`/documents/import`) + bulk-generate (`/documents/bulk-generate`) + batch status polling (`/documents/batches/:batchId`)
+- [ ] Client-side documents list/detail pages, generate-from-template UI
 
 ## Phase 6 — Dashboard, Notifications, Polish (not started)
 
@@ -94,8 +103,9 @@ Nothing is currently mid-implementation. Phase 4 closed out cleanly (server-side
 # Known Issues
 
 1. **Field Definitions has no dedicated RBAC resource** — it reuses `templates:read`/`templates:write` (see Current Work above). Revisit if a role ever needs field-definition access independent of template access.
-2. **Redis is connected but unused** — `ioredis` is wired in `server/src/config/redis.ts` but nothing consumes it yet (no queue, no rate-limit store, no session cache), despite [PRD 09](PRD/09-nfr-deployment-cicd.md) specifying Redis-backed sliding-window rate limiting. This becomes a real gap starting Phase 5 (queue) but is also relevant to the rate-limiting NFR which Phase 1–3 haven't implemented either.
+2. **Redis is now load-bearing only for the render queue, not for rate limiting** — the BullMQ queue (`server/src/queues/render.queue.ts`) is the first real consumer of Redis, but [PRD 09](PRD/09-nfr-deployment-cicd.md)'s Redis-backed sliding-window rate limiting still isn't implemented (`server/src/middleware/rate-limit.ts` predates this and should be revisited — see Technical Debt).
 3. **S3 storage driver throws on use** (`server/src/storage/index.ts:11`) — intentional Phase 7 placeholder, not a bug, but worth flagging so nobody sets `STORAGE_DRIVER=s3` in any deployed env before Phase 7.
+4. **Root and BullMQ-bundled `ioredis` are two different installed versions** (npm couldn't dedupe them because BullMQ pins an exact version) — harmless at runtime, but means any future code that needs an `IORedis` instance typed against BullMQ's `Queue`/`Worker` connection option must build a plain `RedisOptions` object (see `queues/redis-connection.ts`) rather than constructing its own client, or it won't typecheck.
 
 ---
 
@@ -103,24 +113,25 @@ Nothing is currently mid-implementation. Phase 4 closed out cleanly (server-side
 
 - No Docker Compose / Dockerfiles at all yet — local dev currently depends on cloud-hosted MongoDB Atlas + Upstash Redis per `README.md`, which works for solo dev but diverges from the PRD's documented Docker-first NFR story ([PRD 09](PRD/09-nfr-deployment-cicd.md)). Likely fine to defer to Phase 7 as planned, but flagging so it isn't forgotten.
 - No CI pipeline — lint/typecheck/test only run locally (via Husky pre-commit/pre-push hooks), nothing enforced on push/PR yet.
-- Rate limiting middleware (`server/src/middleware/rate-limit.ts`) exists from Phase 1 but should be revisited once Redis is actually load-bearing (Phase 5) to confirm it's using a sliding-window Redis store rather than in-memory, per [PRD 05 §5.14](PRD/05-api-design.md).
+- Rate limiting middleware (`server/src/middleware/rate-limit.ts`) exists from Phase 1 but should be revisited now that Redis is actually load-bearing (the render queue) to confirm it's using a sliding-window Redis store rather than in-memory, per [PRD 05 §5.14](PRD/05-api-design.md).
 - No project-level "run/verify this app" skill exists yet — verifying the Designer UI required improvising an ephemeral-Mongo + Playwright setup from scratch in a scratch temp directory. Worth capturing as a real project skill (e.g. via `/run-skill-generator`) before the next UI-heavy phase, so it doesn't need re-deriving.
 - The Designer's table-element column editor is raw JSON, not a visual column builder — fine for an admin comfortable with the schema, but worth a real UI before Phase 4 is considered "polished" (tracked here, not blocking Phase 5).
+- Regenerating a document leaves its previous PDF blob orphaned in storage (only the `GeneratedPdf` DB row is replaced via upsert, not the old file on disk/S3) — fine for the local driver during development, but worth a cleanup pass (delete-on-replace, or a GC sweep) before Phase 7's storage hardening.
 
 ---
 
 # Blockers
 
-None. The codebase is in a clean, fully-tested state with no partial work in progress. Phase 4 can start immediately.
+None. The codebase is in a clean, fully-tested state with no partial work in progress.
 
 ---
 
 # Next Recommended Task
 
-**Start Phase 5: Document Generation.** Install `bullmq` and stand up `server/src/workers/` with a render worker consuming Redis-backed jobs; add the `server/src/modules/documents/` module (create with the sync-fast-path/async-queue split per [PRD 06 §6.2](PRD/06-flows.md), regenerate against the pinned `templateVersionId`, signed-URL PDF retrieval); then the data-import path (`csv-parse`/`exceljs`, none installed yet) with column mapping + bulk-generate + batch polling. Land the API + worker + tests first, same sequencing rationale as Phase 4: a queue and a documents API are prerequisites for any generation UI to be demoable against something real.
+**Finish Phase 5: Data Import + Bulk Generate (Phase 5b).** Install `csv-parse`/`exceljs` and build the import pipeline — column-mapping against `template.fields[]`, `/documents/import`, `/documents/bulk-generate`, and `/documents/batches/:batchId` for polling — on the server, then the client-side generate-from-template flow (auto-generated data-entry form, import-mapping UI, batch progress). Same sequencing rationale as before: land the import/batch API first so the UI has something real to call.
 
 ---
 
 # Last Updated
 
-2026-06-29 — completed Phase 4 (Templates + Field Definitions API, and the Designer UI client-side), verified live in a browser; see `docs/SESSION_LOG.md` for this session's entry.
+2026-06-29 — completed Phase 5a (single-document generation: Documents API, BullMQ render worker, sync/async split); see `docs/SESSION_LOG.md` for this session's entry. Phase 5b (data import/bulk-generate) remains.

@@ -14,6 +14,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   INVALID_TOKEN: 400,
   LAST_ADMIN: 409,
   STALE_VERSION: 409,
+  NOT_READY: 409,
 };
 
 /** Thrown anywhere in the request lifecycle; caught and shaped by the centralized error handler — see PRD 08 §8.2. */

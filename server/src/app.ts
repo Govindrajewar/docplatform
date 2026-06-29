@@ -13,6 +13,7 @@ import { auditLogsRouter } from './modules/audit-logs/audit-logs.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { assetsRouter } from './modules/assets/assets.routes';
 import { customersRouter } from './modules/customers/customers.routes';
+import { documentsRouter } from './modules/documents/documents.routes';
 import { fieldDefinitionsRouter } from './modules/field-definitions/field-definitions.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { organizationsRouter } from './modules/organizations/organizations.routes';
@@ -44,6 +45,7 @@ export function createApp(): Express {
   app.use('/api/v1/search', searchRouter);
   app.use('/api/v1/templates', templatesRouter);
   app.use('/api/v1/field-definitions', fieldDefinitionsRouter);
+  app.use('/api/v1/documents', documentsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

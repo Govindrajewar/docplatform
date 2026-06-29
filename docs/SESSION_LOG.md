@@ -4,6 +4,46 @@
 
 ---
 
+## Session — 2026-06-29 (Phase 5a — Document Generation API + render worker)
+
+**Branch:** `main`
+**Commit at session start:** `4b76642...` (feat: Phase 4 Designer UI) — this session's changes are uncommitted at the time of writing.
+
+### Context
+
+Continuation of the same day's work. The user asked to start the next phase; per `docs/IMPLEMENTATION_STATUS.md`'s "Next Recommended Task," that's Phase 5 (Document Generation). Scoped this session to single-document generation only (BullMQ worker + the core Documents API), deferring CSV/Excel/JSON import and bulk-generate to a follow-up session — same API-before-UI, core-before-bulk sequencing rationale used for Phase 4.
+
+### Work completed
+
+- **Shared package:** added `NOT_READY` error code; `document.schema.ts` (`DOCUMENT_STATUSES`, `createDocumentSchema`).
+- **Server — models:** `Document` (organizationId/templateId/templateVersionId pinned at creation/customerId/dataPayload/status/generatedPdfId/failureReason/createdBy/isDeleted) and `GeneratedPdf` (documentId unique/storageKey/fileSizeBytes/pageCount/checksum).
+- **Server — `render-document.ts`:** a single `renderDocument(documentId)` function shared by the synchronous fast-path and the BullMQ worker — exactly one rendering code path. Idempotency guard only short-circuits on `status === 'generated'` (not `'failed'`), so both automatic retries and explicit `/regenerate` can still re-process a failed document.
+- **Server — `queues/render.queue.ts` + `workers/`:** a lazily-constructed BullMQ `Queue` singleton, only ever touched once a document's `dataPayload` crosses a 200-row complexity threshold (`complexity.ts`); the `Worker` (`workers/render.worker.ts`, `workers/index.ts`, run via the pre-existing `npm run worker` script) is a separate process entrypoint never imported by `app.ts`, so it adds zero risk to the existing test suite.
+- **Server — `modules/documents/`:** repository/service/controller/routes — create (validates the template is published, pins `templateVersionId`), get, list (templateId/customerId/status filters), regenerate, soft-delete, and PDF retrieval (`409 NOT_READY` while generating, `409 CONFLICT` with the failure reason if failed). Wired into `app.ts` at `/api/v1/documents`. Routes explicitly comment that `/documents/import`, `/documents/bulk-generate`, `/documents/batches/:batchId` are deferred.
+- Wrote `server/tests/integration/documents.test.ts` (8 tests: sync generation + PDF retrieval, rejecting an unpublished template, routing a large payload to the async queue — `enqueueRenderJob` mocked via `vi.mock` so the test never touches real Redis — cross-org 404, regenerate, soft-delete, list filters, and the NOT_READY/CONFLICT PDF-retrieval status checks via direct `DocumentModel` manipulation).
+- Full verification pass: `npm run typecheck` (all 3 workspaces, after the ioredis fix below), `npm run lint` (clean), `npx prettier --check` (clean after one auto-format), full server suite **136/136 passing** (128 previous + 8 new).
+
+### Bugs fixed
+
+- **BullMQ/ioredis duplicate-package type mismatch (build-time):** npm installed two different `ioredis` versions (root `^5.4.1` → 5.11.1; BullMQ pins exactly `5.10.1`, so it got its own nested copy), making a constructed `IORedis` instance from the root package nominally incompatible with BullMQ's `ConnectionOptions` type. Fixed by never constructing an `IORedis` instance for BullMQ at all — `queues/redis-connection.ts` builds a plain `RedisOptions` object (host/port/username/password/tls parsed from `REDIS_URL`) instead, which is structurally typed and lets BullMQ construct its own client from its own bundled copy.
+- **`GeneratedPdf.documentId` unique-index conflict on regenerate:** `renderDocument` always called `GeneratedPdfModel.create(...)`; a second render of the same document hit a duplicate-key error, which the render try/catch silently turned into a generic `status: 'failed'` with a misleading failure reason. Found by writing the regenerate test, not by inspection. Fixed by upserting (`findOneAndUpdate` + `upsert: true`) instead of always creating.
+- **Mongoose `minimize: true` (the schema default) strips an empty `dataPayload: {}` to `undefined` before the `required` validator runs**, so creating a document for a fully static template (no dynamic fields, a legitimate empty payload) failed every time with a generic `INTERNAL_ERROR`. Root-caused via an isolated Mongoose repro script (a bare schema + `M.create({ dataPayload: {} })` reproduced it outside the app entirely). Fixed by setting `minimize: false` on the `Document` schema.
+
+### New issues discovered
+
+- Regenerating a document leaves its previous PDF blob orphaned in storage (only the DB row is replaced via upsert) — flagged in `docs/IMPLEMENTATION_STATUS.md` Technical Debt, not blocking.
+- Root vs. BullMQ-bundled `ioredis` version split is permanent until one side's version pin changes — flagged in Known Issues so future Redis-touching code knows to use `redis-connection.ts`'s pattern rather than constructing its own client.
+
+### Remaining work
+
+Phase 5b (data import/bulk-generate: `csv-parse`/`exceljs`, column mapping, `/documents/import`, `/documents/bulk-generate`, batch polling) and the corresponding client UI. See `docs/IMPLEMENTATION_STATUS.md` → "Next Recommended Task".
+
+### Recommended next steps
+
+Install `csv-parse`/`exceljs`, land the import + bulk-generate API (column mapping against `template.fields[]`, batch status polling) server-side first, then the client-side generate-from-template flow — same API-before-UI sequencing as every prior phase.
+
+---
+
 ## Session — 2026-06-29 (Phase 4 Designer UI — completes Phase 4)
 
 **Branch:** `main`
