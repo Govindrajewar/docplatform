@@ -12,7 +12,7 @@ Run this any time you want to validate the full codebase (lint + typecheck + tes
 npm run verify
 ```
 
-This runs: `lint → build:shared → typecheck → tests (153 total) → build` in the correct dependency order. Takes ~4–5 minutes because of the test suite. The CI pipeline on GitHub only runs lint + typecheck + build on every push (fast, ~1 min) — tests are left for you to run explicitly with `npm run verify` when you want them.
+This runs: `lint → build:shared → typecheck → build` in the correct dependency order. Fast (~1 min). To also run the full test suite (153 tests, ~4–5 min), run `npm test` separately.
 
 ---
 
