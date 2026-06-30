@@ -23,19 +23,14 @@
     "test": "npm run test --workspace=server",
     "test:watch": "npm run test:watch --workspace=server",
     "verify": "npm run lint && npm run build:shared && npm run typecheck && npm run build",
-    "seed": "npm run seed --workspace=server",
-    "prepare": "husky"
+    "seed": "npm run seed --workspace=server"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.31.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.2.10",
     "prettier": "^3.3.3",
     "typescript": "^5.6.3"
   },
